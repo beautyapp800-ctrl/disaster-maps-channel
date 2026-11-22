@@ -1,0 +1,11 @@
+{
+ "res": "1920x1080",
+ "cpus": 4,
+ "s_per_frame_2d_incl_x264": 0.07230046590169271,
+ "mb_per_min_2d": 6.038106,
+ "s_per_frame_3d_render": 0.47220115822578784,
+ "s_per_frame_3d_incl_x264": 0.4785183032353719,
+ "mb_per_min_3d": 96.797178,
+ "gl_renderer": "llvmpipe (LLVM 21.1.8, 256 bits)",
+ "triangles": 1317600
+}
