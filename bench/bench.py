@@ -84,6 +84,16 @@ def base_map(w, h):
     return fr, img
 
 
+def encoder(name):
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", "24", "-i", "-",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", str(OUT / f"{name}_{RES}.mp4")]
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE)
+
+
+def mb_per_min(name, n):
+    return (OUT / f"{name}_{RES}.mp4").stat().st_size / 1e6 / (n / 24) * 60
+
+
 def bench_2d(rows):
     fr, base = base_map(W, H)
     k = W / 1920
@@ -95,6 +105,7 @@ def bench_2d(rows):
     for r in rows:
         by_year.setdefault(r[0], []).append(r)
     years = sorted(by_year)
+    enc = encoder("enc2d")
     t0 = time.time()
     count = 0
     for i in range(N2D):
@@ -120,8 +131,9 @@ def bench_2d(rows):
         a = np.asarray(frame)
         if i == N2D // 2:
             frame.save(OUT / f"sample2d_{RES}.jpg", quality=90)
-        _ = a.tobytes()
-    return (time.time() - t0) / N2D
+        enc.stdin.write(a.tobytes())
+    enc.stdin.close(); enc.wait()
+    return (time.time() - t0) / N2D, mb_per_min("enc2d", N2D)
 
 
 def etopo():
@@ -156,9 +168,11 @@ def bench_3d(rows):
             d.line([(px[0], py[0]), (px[1], py[1])], fill=F_COL[m], width=max(1, m - 1))
     u, v = fr.xy(x, y)
     u, v = u / tw, 1 - v / th
-    sx = (x - fr.cx) * 1e-6 * 1.6
-    sy = (y - fr.cy) * 1e-6 * 1.6
-    sz = np.where(z > 0, z, z * 0.15) * 1e-4 * 0.9   # vertical exaggeration ~ x35
+    pu, pv = fr.xy(x, y)
+    sx = (pu / tw - 0.5) * 4.0
+    sy = -(pv / th - 0.5) * 4.0 * th / tw
+    km_per_unit = 4600.0 / 4.0          # lower 48 ~4600 km wide = 4 units
+    sz = np.where(z > 0, z, z * 0.15) / 1000.0 / km_per_unit * 35   # vertical exaggeration x35
     nr, nc = z.shape
     verts = np.dstack([sx, sz, -sy, u, v]).astype("f4").reshape(-1, 5)
     idx = []
@@ -206,14 +220,16 @@ def bench_3d(rows):
 
     P = persp(40, W / H, 0.05, 50)
     # Joplin 2011 (SPC: 37.06 N, 94.57 W) - vortex position
-    jx, jy = albers(-94.57, 37.06)
-    vx, vz = (jx - fr.cx) * 1.6e-6, -(jy - fr.cy) * 1.6e-6
+    ju, jv = fr.ll(-94.57, 37.06)
+    vx, vz = (float(ju) / tw - 0.5) * 4.0, (float(jv) / th - 0.5) * 4.0 * th / tw
     times = []
     sample_at = N3D // 2
+    enc = encoder("enc3d")
+    T0 = time.time()
     for i in range(N3D):
         t0 = time.time()
         a = i / N3D * 0.8
-        eye = (vx + 1.6 * math.sin(a), 1.1, vz + 1.6 * math.cos(a))
+        eye = (vx + 1.2 * math.sin(a), 0.7, vz + 1.2 * math.cos(a))
         mvp = (P @ look(eye, (vx, 0, vz))).T.copy()
         msaa.use(); ctx.clear(0.25, 0.67, 0.92)
         prog["mvp"].write(mvp.tobytes()); tex.use(0)
@@ -221,11 +237,11 @@ def bench_3d(rows):
         # funnel: 40 rings x 48 points as triangle strips
         pts, cols = [], []
         for r in range(40):
-            hgt = r / 40 * 0.45
-            rad = 0.008 + (r / 40) ** 1.6 * 0.09
+            hgt = r / 40 * 0.30
+            rad = 0.004 + (r / 40) ** 1.6 * 0.05
             for j in range(48):
                 ang = j / 48 * 2 * math.pi + i * 0.35 + r * 0.25
-                for dh, dr in ((0, 0), (0.45 / 40, 0.0)):
+                for dh, dr in ((0, 0), (0.30 / 40, 0.0)):
                     pts.append((vx + rad * math.cos(ang), hgt + dh, vz + rad * math.sin(ang)))
                     g = 0.55 + 0.4 * math.sin(ang * 3)
                     cols.append((g, g, g * 1.05))
@@ -236,10 +252,12 @@ def bench_3d(rows):
         va.release(); vb.release()
         ctx.copy_framebuffer(outfb, msaa)
         raw = outfb.read(components=3)
+        enc.stdin.write(np.flipud(np.frombuffer(raw, np.uint8).reshape(H, W, 3)).tobytes())
         if i == sample_at:
             Image.frombytes("RGB", (W, H), raw).transpose(Image.FLIP_TOP_BOTTOM).save(OUT / f"sample3d_{RES}.jpg", quality=90)
         times.append(time.time() - t0)
-    return float(np.mean(times[3:])), info, int(len(idx) / 3)
+    enc.stdin.close(); enc.wait()
+    return float(np.mean(times[3:])), (time.time() - T0) / N3D, mb_per_min("enc3d", N3D), info, int(len(idx) / 3)
 
 
 def bench_encode():
@@ -261,12 +279,11 @@ def bench_encode():
 if __name__ == "__main__":
     rows = tornadoes()
     res = {"res": f"{W}x{H}", "cpus": os.cpu_count()}
-    res["s_per_frame_2d"] = bench_2d(rows)
+    res["s_per_frame_2d_incl_x264"], res["mb_per_min_2d"] = bench_2d(rows)
     try:
-        res["s_per_frame_3d"], res["gl_renderer"], res["triangles"] = bench_3d(rows)
+        (res["s_per_frame_3d_render"], res["s_per_frame_3d_incl_x264"], res["mb_per_min_3d"],
+         res["gl_renderer"], res["triangles"]) = bench_3d(rows)
     except Exception as e:  # report, do not hide
         res["error_3d"] = repr(e)
-    if (OUT / f"sample3d_{RES}.jpg").exists():
-        res["encode_fps"], res["mb_per_min"] = bench_encode()
     print(json.dumps(res, indent=1))
     (OUT / f"bench_{RES}.json").write_text(json.dumps(res, indent=1))

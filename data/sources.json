@@ -1,0 +1,122 @@
+{
+ "checked": "2026-11-22",
+ "rule": "Only sources with licence_confirmed=true may be used on screen. Every on-screen number must trace to one of these.",
+ "sources": {
+  "spc_tornadoes": {
+   "title": "NOAA/NWS Storm Prediction Center Severe Weather Database - tornadoes 1950-2025",
+   "publisher": "NOAA National Weather Service, Storm Prediction Center",
+   "data": "spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv",
+   "licence": "Public domain: NWS web pages and data are in the public domain unless noted (weather.gov/disclaimer)",
+   "licence_confirmed": true,
+   "checked_facts": "73,458 tornado records 1950-2025; 596 rated F4/EF4, 60 rated F5/EF5"
+  },
+  "spc_hail_wind": {
+   "title": "SPC Severe Weather Database - hail and damaging wind 1955-2024",
+   "publisher": "NOAA NWS Storm Prediction Center",
+   "data": "spc.noaa.gov/wcm/data/1955-2024_hail.csv.zip, 1955-2024_wind.csv.zip",
+   "licence": "Public domain (weather.gov/disclaimer)",
+   "licence_confirmed": true
+  },
+  "hurdat2": {
+   "title": "Atlantic hurricane database HURDAT2 1851-2025 (and NE/Central Pacific 1949-2025)",
+   "publisher": "NOAA National Hurricane Center",
+   "data": "nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt",
+   "licence": "Public domain (NWS/NOAA product, weather.gov/disclaimer)",
+   "licence_confirmed": true,
+   "checked_facts": "1,988 Atlantic storms 1851-2025"
+  },
+  "gridsat_b1": {
+   "title": "NOAA CDR GridSat-B1 11-micron brightness temperature (real satellite cloud images, 1980-present, 3-hourly)",
+   "publisher": "NOAA NCEI CDR Program (Knapp et al. 2011, doi 10.7289/V59P2ZKR)",
+   "data": "ncei.noaa.gov/data/geostationary-ir-channel-brightness-temperature-gridsat-b1/access/",
+   "licence": "CDR Use Agreement: non-proprietary, no restrictions placed upon their use; citation requested",
+   "licence_confirmed": true
+  },
+  "nasa_gibs": {
+   "title": "NASA GIBS / Worldview satellite imagery (MODIS, VIIRS true colour, 2000-present)",
+   "publisher": "NASA EOSDIS",
+   "data": "gibs.earthdata.nasa.gov",
+   "licence": "NASA: data openly available without restriction; credit NASA Worldview",
+   "licence_confirmed": true
+  },
+  "usgs_comcat": {
+   "title": "USGS ANSS Comprehensive Earthquake Catalog (ComCat)",
+   "publisher": "U.S. Geological Survey",
+   "data": "earthquake.usgs.gov/fdsnws/event/1/",
+   "licence": "USGS-authored data are U.S. public domain; credit requested (usgs.gov copyrights-and-credits)",
+   "licence_confirmed": true,
+   "checked_facts": "M4+ California box since 1900: 4,362; M5+ Alaska box: 3,376; M5+ lower 48: 1,323; M3+ Oklahoma box: 3,087 (counts on 2026-11-22)"
+  },
+  "usgs_3dep": {
+   "title": "USGS 3D Elevation Program (relief for 3D scenes)",
+   "publisher": "U.S. Geological Survey",
+   "data": "prd-tnm.s3.amazonaws.com StagedProducts/Elevation",
+   "licence": "U.S. public domain",
+   "licence_confirmed": true
+  },
+  "etopo": {
+   "title": "NOAA ETOPO1 / ETOPO 2022 global relief (land + sea floor)",
+   "publisher": "NOAA NCEI",
+   "data": "coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180",
+   "licence": "NOAA data, open; no copyright statement found - treated as US Government work (to re-check before production)",
+   "licence_confirmed": false
+  },
+  "ncei_hazards": {
+   "title": "NCEI Global Historical Tsunami, Significant Earthquake and Significant Volcanic Eruption databases",
+   "publisher": "NOAA NCEI / World Data Service",
+   "data": "ngdc.noaa.gov/hazel/hazard-service/api/v1/",
+   "licence": "No licence statement on page; US Government work - confirm before build",
+   "licence_confirmed": false,
+   "checked_facts": "277 tsunami events with country USA since 1800; 50 significant eruptions United States"
+  },
+  "storm_events": {
+   "title": "NOAA NCEI Storm Events Database 1950-2025 (floods, blizzards, heat, wind, hail, surge)",
+   "publisher": "NOAA NCEI / NWS",
+   "data": "ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/",
+   "licence": "NWS-reported data, public domain (weather.gov/disclaimer)",
+   "licence_confirmed": true
+  },
+  "nifc_perimeters": {
+   "title": "NIFC InterAgency Fire Perimeter History - all years",
+   "publisher": "National Interagency Fire Center",
+   "data": "data-nifc.opendata.arcgis.com (InterAgencyFirePerimeterHistory_All_Years_View)",
+   "licence": "Federal interagency data; nifc.gov disclaimer page 404 - confirm on the dataset page before build",
+   "licence_confirmed": false,
+   "checked_facts": "98,168 perimeters in the service (2026-11-22)"
+  },
+  "mtbs": {
+   "title": "Monitoring Trends in Burn Severity (burned area boundaries 1984-2024)",
+   "publisher": "USGS EROS + USDA Forest Service",
+   "data": "mtbs.gov/direct-download",
+   "licence": "USGS/USFS federal data; confirm citation page before build",
+   "licence_confirmed": false
+  },
+  "jpl_fireballs": {
+   "title": "CNEOS Fireball and Bolide data (US Government sensors, 1988-present)",
+   "publisher": "NASA JPL CNEOS",
+   "data": "ssd-api.jpl.nasa.gov/fireball.api",
+   "licence": "No licence statement; NASA data - confirm",
+   "licence_confirmed": false,
+   "checked_facts": "888 fireballs worldwide with location, 31 over the lower 48"
+  },
+  "census_states": {
+   "title": "Cartographic boundary states 2023",
+   "publisher": "US Census Bureau",
+   "data": "www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_20m.zip",
+   "licence": "US Government work, public domain",
+   "licence_confirmed": true
+  },
+  "viirs_night_lights": {
+   "title": "NASA Black Marble night lights (city lights effect)",
+   "publisher": "NASA GSFC",
+   "data": "blackmarble.gsfc.nasa.gov",
+   "licence": "NASA imagery, openly available; confirm per product",
+   "licence_confirmed": false
+  },
+  "excluded": {
+   "openfema": "Terms limit use to statistical research or reporting + mandatory disclaimer - not used on screen",
+   "us_drought_monitor": "(c) National Drought Mitigation Center, permission page not confirmed - not used",
+   "billion_dollar_disasters": "NCEI page gives a 2025 citation; check whether it is still updated before any topic"
+  }
+ }
+}
