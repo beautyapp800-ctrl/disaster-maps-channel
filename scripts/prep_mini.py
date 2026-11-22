@@ -178,7 +178,10 @@ def dem(keys, km=8.0, n=512):
         url = (f"{DEP}?bbox={b[0]},{b[1]},{b[2]},{b[3]}&bboxSR=4326&imageSR=4326&size={W_},{H_}&format=tiff&pixelType=F32"
                f"&noDataInterpretation=esriNoDataMatchAny&interpolation=RSP_BilinearInterpolation&f=image")
         a = np.asarray(Image.open(io.BytesIO(get(url))), np.float32)
-        a = np.where(np.abs(a) > 1e4, 0.0, a)
+        a = np.nan_to_num(a, nan=-2.0)
+        a = np.where((a < -3) | (a > 80), -2.0, a)       # NoData and its interpolated edges = open water (coastal towns only)
+        from scipy.ndimage import median_filter
+        a = median_filter(a, 5)
         geo = (b[0], b[3], (b[2] - b[0]) / W_)
         fx = (lon - b[0]) / ((b[2] - b[0]) / W_) - 0.5
         fy = (b[3] - lat) / ((b[3] - b[1]) / H_) - 0.5

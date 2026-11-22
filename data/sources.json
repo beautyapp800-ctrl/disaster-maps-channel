@@ -178,5 +178,18 @@
    "rule": "flood level in metres over USGS 3DEP ground, kept below the reported peak storm tide; illustrative, never labelled as a measurement",
    "todo": "record the TCR peak value per storm before publishing the hurricane film"
   }
+ },
+ "event_names_hurricane": {
+  "rule": "Place of every hurricane close-up checked on NOAA NHC / NWS pages (2026-11-22). Category and wind come from HURDAT2.",
+  "galveston1900": "vlab.noaa.gov/web/nws-heritage/-/galveston-storm-of-1900 (city of Galveston, Sept 8 1900)",
+  "laborday1935": "weather.gov/key/1900sHurricanes + nhc.noaa.gov/outreach/history (middle Florida Keys; Long Key/Craig Key landfall, Islamorada area shown)",
+  "newengland1938": "weather.gov/okx/1938hurricanehistory (landfall near Bellport NY; Westhampton Beach destroyed; 2nd landfall Connecticut)",
+  "camille1969": "nhc.noaa.gov/outreach/history (storm tide 24.6 ft at Pass Christian MS); weather.gov/mob/camille (eye over Waveland/Bay St. Louis)",
+  "andrew1992": "aoml.noaa.gov/hurricane_blog/thirtieth-anniversary-of-hurricane-andrews-landfall-in-south-florida (landfall near Homestead FL)",
+  "katrina2005": "nhc.noaa.gov/data/tcr/AL122005_Katrina.pdf (final landfall at the Louisiana/Mississippi border); weather.gov/lix/katrina_anniversary (surge 25-28 ft on the Mississippi coast); shown at Waveland MS",
+  "harvey2017": "nhc.noaa.gov/data/tcr/AL092017_Harvey.pdf (landfall on San Jose Island 5 n mi east of Rockport TX; worst damage at Rockport)",
+  "michael2018": "nhc.noaa.gov/data/tcr/AL142018_Michael.pdf (landfall near Mexico Beach and Tyndall AFB FL)",
+  "ian2022": "nhc.noaa.gov/data/tcr/AL092022_Ian.pdf (landfall at Cayo Costa FL; 10-15 ft surge at Fort Myers Beach)",
+  "helene2024": "nhc.noaa.gov/data/tcr/AL092024_Helene.pdf + weather.gov/tae/helene2024 (landfall just east of the Aucilla River mouth; surge destroyed ~80% of buildings in Keaton Beach and Steinhatchee)"
  }
 }
