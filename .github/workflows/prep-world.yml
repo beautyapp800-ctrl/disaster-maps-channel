@@ -1,0 +1,29 @@
+name: prep-world
+# One-off data preparation for the living map (NASA Blue/Black Marble via GIBS, USGS NAIP close-ups, OSM buildings).
+# Results are committed to the branch the workflow runs on.
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "world local buildings (space separated)"
+        default: "world local buildings"
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp
+      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - run: python scripts/prep_world.py ${{ inputs.what }}
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/world data/local
+          git commit -m "prep-world: ${{ inputs.what }}" || echo "nothing to commit"
+          for i in 1 2 3; do git pull --rebase -X theirs origin ${{ github.ref_name }} && git push origin HEAD:${{ github.ref_name }} && break; sleep 10; done

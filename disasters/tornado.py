@@ -35,10 +35,10 @@ STATE_NAMES = {"AL": "ALABAMA", "AZ": "ARIZONA", "AR": "ARKANSAS", "CA": "CALIFO
 EVENTS = [
     ("waco", "WACO, TEXAS", "1953-05-11", "TX", "16:10", None),
     ("flint", "FLINT, MICHIGAN", "1953-06-08", "MI", "19:30", None),
-    ("udall", "BLACKWELL TO UDALL", "1955-05-25", "OK", "22:00", None),
+    ("udall", "UDALL, KANSAS", "1955-05-25", "OK", "22:00", None),
     ("jackson", "JACKSON, MISSISSIPPI", "1966-03-03", "MS", "18:30", None),
     ("xenia", "XENIA, OHIO", "1974-04-03", "OH", "13:30", ("1974-04-03", "1974-04-04", "SUPER OUTBREAK: {n} TORNADOES IN 2 DAYS")),
-    ("moore99", "MOORE, OKLAHOMA", "1999-05-03", "OK", "17:26", None),
+    ("moore99", "BRIDGE CREEK-MOORE, OKLAHOMA", "1999-05-03", "OK", "17:26", None),
     ("greensburg", "GREENSBURG, KANSAS", "2007-05-04", "KS", "20:03", None),
     ("hackleburg", "HACKLEBURG, ALABAMA", "2011-04-27", "AL", "14:05", ("2011-04-25", "2011-04-28", "APRIL 25-28 OUTBREAK: {n} TORNADOES")),
     ("joplin", "JOPLIN, MISSOURI", "2011-05-22", "MO", "16:34", None),

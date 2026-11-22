@@ -111,12 +111,54 @@
    "publisher": "NASA GSFC",
    "data": "blackmarble.gsfc.nasa.gov",
    "licence": "NASA imagery, openly available; confirm per product",
-   "licence_confirmed": false
+   "licence_confirmed": true
   },
   "excluded": {
    "openfema": "Terms limit use to statistical research or reporting + mandatory disclaimer - not used on screen",
    "us_drought_monitor": "(c) National Drought Mitigation Center, permission page not confirmed - not used",
    "billion_dollar_disasters": "NCEI page gives a 2025 citation; check whether it is still updated before any topic"
+  },
+  "event_names": {
+   "rule": "Place name of every famous tornado card checked on an NWS page (2026-11-22). Numbers on the card come from the SPC database row.",
+   "waco": "weather.gov/fwd/wacotormay1953 (Waco Tornado - May 11, 1953)",
+   "flint": "weather.gov/dtx/1953beecher (Flint-Beecher tornado, June 8, 1953)",
+   "udall": "weather.gov/ict/udall_stormreport + weather.gov/oun/events-19550525 (tornado formed near Peckham OK, struck Udall KS; Blackwell was a separate tornado, so the card says UDALL, KANSAS)",
+   "jackson": "weather.gov/jan/19660303_tornado (Candlestick Park tornado, south Jackson MS)",
+   "xenia": "weather.gov/iln/19740403 (Super Outbreak, Xenia F5)",
+   "moore99": "weather.gov/oun/events-19990503 (Bridge Creek/OKC area F5, Moore)",
+   "greensburg": "weather.gov/ddc/greensburgfiveyear (Greensburg EF5, May 4, 2007)",
+   "hackleburg": "weather.gov/bmx/event_04272011hackleburg (Hackleburg EF5)",
+   "joplin": "weather.gov/news/052212-joplin + NWS Central Region service assessment (Joplin EF5)",
+   "moore13": "weather.gov/oun/events-20130520 (Newcastle-Moore EF5)",
+   "mayfield": "weather.gov/pah/december-10th-11th-2021-tornado (Mayfield EF4)"
+  },
+  "blue_marble": {
+   "title": "Blue Marble Next Generation (GIBS layer BlueMarble_NextGeneration)",
+   "publisher": "NASA Earth Observatory / NASA EOSDIS GIBS",
+   "data": "gibs.earthdata.nasa.gov",
+   "licence": "NASA imagery, openly available without restriction; credit NASA",
+   "licence_confirmed": true
+  },
+  "black_marble": {
+   "title": "Black Marble night lights 2016 (GIBS layer VIIRS_Black_Marble)",
+   "publisher": "NASA / NOAA Suomi NPP VIIRS",
+   "data": "gibs.earthdata.nasa.gov",
+   "licence": "NASA imagery, openly available without restriction; credit NASA",
+   "licence_confirmed": true
+  },
+  "usgs_naip": {
+   "title": "USGS The National Map orthoimagery (USGSImageryOnly, NAIP)",
+   "publisher": "USGS / USDA FSA",
+   "data": "basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer",
+   "licence": "US Government work, public domain; credit USGS The National Map",
+   "licence_confirmed": true
+  },
+  "osm_buildings": {
+   "title": "OpenStreetMap building footprints",
+   "publisher": "OpenStreetMap contributors",
+   "data": "Overpass API",
+   "licence": "ODbL 1.0 - attribution required: (c) OpenStreetMap contributors (in every description)",
+   "licence_confirmed": true
   }
  }
 }
