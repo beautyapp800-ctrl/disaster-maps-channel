@@ -31,7 +31,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
-      - run: pip install numpy pillow pyshp moderngl
+      - run: pip install numpy pillow pyshp moderngl shapely
+      - name: Miniature-world data (NLCD, 3DEP, OSM) from branch data-mini
+        run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
       - name: NOAA SPC tornado database 1950-2025 (public domain)
         run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
@@ -65,7 +67,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
-      - run: pip install numpy pillow pyshp moderngl
+      - run: pip install numpy pillow pyshp moderngl shapely
+      - name: Miniature-world data (NLCD, 3DEP, OSM) from branch data-mini
+        run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
       - name: NOAA SPC tornado database 1950-2025 (public domain)
         run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv

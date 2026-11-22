@@ -103,14 +103,14 @@ def build(out: Path):
     img.paste(lay, (0, 0), lay)
     res["A_all_tornadoes"] = (img, mask, boxes)
 
-    # B: the town close-up: Moore 2013 EF5 crossing real USGS imagery with 3D OSM buildings, debris and damage path
+    # B: the town close-up: Moore 2013 EF5 in the miniature-world town (OSM buildings, trees), funnel, mother cloud, damage path
     e = ev["moore13"]
     t = e["t0"] + EV_HIT + 3.6
     ph = TL.phase_at(t)
     P.update(t, "main")
     sc.set_overlay(P.texture(t, "main"))
     cam = r.dir.cam(t)
-    img = sc.render(cam, tm=t, ovl_alpha=0.2, vortices=r._vortices(t, ph, cam), local=r.local_params(t, ph, cam))
+    img = sc.render(cam, tm=t, ovl_alpha=0.2, vortices=r._vortices(t, ph, cam, skip_famous=True), local=r.local_params(t, ph, cam))
     img = shade_left(img, 0.82, 0.55)
     lay, mask, boxes = text_layer([(str(len(TL.f5)), 330 * k, (36 * k, 400 * k), YEL), ("F5 TORNADOES", 100 * k, (44 * k, 500 * k), WHITE),
                                    ("THE STRONGEST SINCE 1950", 46 * k, (46 * k, 560 * k), WHITE)])
@@ -119,7 +119,7 @@ def build(out: Path):
 
     # C: heat map of all tornado paths over the satellite map
     sc.set_overlay(P.heat_texture(76.0))
-    img = sc.render(Cam(0.0, 0.0, 0.05, 3.9, 80, 0), tm=0.0, clouds=0.4)
+    img = sc.render(Cam(0.0, 0.0, 0.05, 3.9, 80, 0), tm=0.0)
     img = shade_left(img, 0.7, 0.5)
     lay, mask, boxes = text_layer([("EVERY", 150 * k, (40 * k, 220 * k), WHITE), ("TORNADO", 170 * k, (40 * k, 372 * k), YEL),
                                    (fmt(total), 130 * k, (44 * k, 520 * k), WHITE), ("1950-2025", 64 * k, (46 * k, 600 * k), YEL)])

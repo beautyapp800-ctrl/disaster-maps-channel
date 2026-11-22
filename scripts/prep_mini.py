@@ -35,6 +35,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 os.environ.setdefault("TEXW", "4096")
 from disasters import core  # noqa: E402
 from prep_world import TOWNS, albers_inv, get  # noqa: E402
+from disasters.hurricane import EVENTS as H_EVENTS  # noqa: E402
+
+HTOWNS = [e[0] for e in H_EVENTS]
+H_LEVELS = {"mid": (64.0, 4096, 0.0006)}      # hurricane towns: mid level only, coarser source (keeps the PC download small)
 
 Image.MAX_IMAGE_PIXELS = None
 NLCD_WMS = "https://www.mrlc.gov/geoserver/mrlc_display/NLCD_2021_Land_Cover_L48/wms"
@@ -68,7 +72,15 @@ def wms_mosaic(lon0, lat0, lon1, lat1, deg, chunk=2048):
             b1, b0 = lat1 - y0 * deg, lat1 - (y0 + h) * deg
             q = urllib.parse.urlencode(dict(SERVICE="WMS", VERSION="1.1.1", REQUEST="GetMap", LAYERS="NLCD_2021_Land_Cover_L48", STYLES="",
                                             SRS="EPSG:4326", BBOX=f"{a0},{b0},{a1},{b1}", WIDTH=w, HEIGHT=h, FORMAT="image/png"))
-            im = Image.open(io.BytesIO(get(NLCD_WMS + "?" + q))).convert("RGB")
+            for k in range(5):
+                try:
+                    im = Image.open(io.BytesIO(get(NLCD_WMS + "?" + q))).convert("RGB")
+                    break
+                except Exception as e:  # noqa: BLE001  (server sometimes returns an error page)
+                    print("  nlcd retry", k + 1, e, flush=True)
+                    time.sleep(20 * (k + 1))
+            else:
+                raise RuntimeError("NLCD chunk failed")
             out[y0:y0 + h, x0:x0 + w] = nlcd_classes(np.asarray(im))
             print(f"  nlcd {x0},{y0} of {W}x{H}", flush=True)
     return out, (lon0, lat1, deg)
@@ -150,6 +162,31 @@ def outer():
     Image.fromarray(resample(eq, geo, lon, lat)).save(out / "outer_4096.jpg", quality=88)
 
 
+def dem(keys, km=8.0, n=512):
+    """USGS 3DEP elevation (metres, float) on an n x n grid axis-aligned in world x/z around the town (for storm-surge flooding)"""
+    out = ROOT / "data" / "region"
+    out.mkdir(parents=True, exist_ok=True)
+    for key in keys:
+        fn = out / f"{key}_dem.npz"
+        if fn.exists():
+            continue
+        clat, clon = json.loads((ROOT / "data" / "local" / f"{key}.json").read_text())["center"]
+        cx, cz = (float(v) for v in core.FR.world(clon, clat))
+        lon, lat = world_grid_lonlat(cx, cz, km / core.KM_PER_UNIT, n)
+        b = (lon.min() - 0.01, lat.min() - 0.01, lon.max() + 0.01, lat.max() + 0.01)
+        W_ = H_ = 768
+        url = (f"{DEP}?bbox={b[0]},{b[1]},{b[2]},{b[3]}&bboxSR=4326&imageSR=4326&size={W_},{H_}&format=tiff&pixelType=F32"
+               f"&noDataInterpretation=esriNoDataMatchAny&interpolation=RSP_BilinearInterpolation&f=image")
+        a = np.asarray(Image.open(io.BytesIO(get(url))), np.float32)
+        a = np.where(np.abs(a) > 1e4, 0.0, a)
+        geo = (b[0], b[3], (b[2] - b[0]) / W_)
+        fx = (lon - b[0]) / ((b[2] - b[0]) / W_) - 0.5
+        fy = (b[3] - lat) / ((b[3] - b[1]) / H_) - 0.5
+        z = a[np.clip(np.round(fy).astype(int), 0, H_ - 1), np.clip(np.round(fx).astype(int), 0, W_ - 1)]
+        np.savez_compressed(fn, z=z.astype(np.float16), km=km)
+        print(key, "dem", float(z.min()), float(z.max()), flush=True)
+
+
 def region(keys):
     out = ROOT / "data" / "region"
     out.mkdir(parents=True, exist_ok=True)
@@ -160,7 +197,7 @@ def region(keys):
         if (out / f"{key}.json").exists():
             continue
         meta = dict(key=key, center=[clat, clon], cx=cx, cz=cz, levels={})
-        for lvl, (km, n, deg) in LEVELS.items():
+        for lvl, (km, n, deg) in (H_LEVELS if key in HTOWNS else LEVELS).items():
             size_w = km / core.KM_PER_UNIT
             lon, lat = world_grid_lonlat(cx, cz, size_w, n)
             pad = 0.02
@@ -281,8 +318,10 @@ def osm(keys):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    what = {a for a in args if a in ("nation", "region", "osm", "outer")} or {"nation", "region", "osm"}
-    keys = [a for a in args if a in TOWNS] or list(TOWNS)
+    what = {a for a in args if a in ("nation", "region", "osm", "outer", "dem")} or {"nation", "region", "osm"}
+    keys = [a for a in args if a in TOWNS or a in HTOWNS] or list(TOWNS)
+    if "hurricanes" in args:
+        keys = HTOWNS
     if "osm" in what:
         try:
             osm(keys)
@@ -294,3 +333,5 @@ if __name__ == "__main__":
         nation()
     if "outer" in what:
         outer()
+    if "dem" in what:
+        dem(keys)

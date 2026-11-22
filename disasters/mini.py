@@ -663,7 +663,8 @@ void main(){
     float lam = max(6.0, camdist*mpu*0.0035);
     float h1 = texture(noise, m/(lam*22.0) + vec2(tm*0.011, tm*0.007)).r;
     float h2 = texture(noise, m/(lam*9.0) - vec2(tm*0.017, -tm*0.012)).g;
-    vec3 wn = normalize(vec3((h1-0.5)*0.55 + (h2-0.5)*0.45, 1.0, (h2-0.5)*0.55 - (h1-0.5)*0.35));
+    float wamp = 1.0 - 0.85*smoothstep(0.05, 0.4, camdist);
+    vec3 wn = normalize(vec3(((h1-0.5)*0.55 + (h2-0.5)*0.45)*wamp, 1.0, ((h2-0.5)*0.55 - (h1-0.5)*0.35)*wamp));
     vec3 v = normalize(eye - vp);
     float fres = pow(1.0 - max(dot(wn, v), 0.0), 3.0);
     col = mix(vec3(0.30,0.71,0.90), vec3(0.11,0.47,0.82), smoothstep(0.5, 0.8, sf));
@@ -694,7 +695,7 @@ void main(){
     col = mix(col, rub*mix(0.65, 1.0, sh), inside*0.85);
   }
   vec4 o = texture(ovl, uv);
-  col = mix(col, o.rgb, o.a*ovl_alpha);
+  col = mix(col, o.rgb, o.a*ovl_alpha*step(0.0, e));
   col *= 1.0 - 0.45*stormAt(lp);
   col *= dim;
   if (outer_on < 0.5) col = mix(vec3(0.78,0.88,0.98), col, smoothstep(0.0, 0.025, e));
@@ -940,6 +941,56 @@ void main(){
   c = vec4(C*alpha, A*alpha);
 }"""
 
+FS_HURR = """#version 330
+uniform float tm; uniform vec3 eye; uniform sampler2D noise; uniform vec3 cen; uniform float R; uniform float Hh;
+uniform float alpha; uniform float spin; uniform float eyer; uniform float seed;
+in vec3 vp; out vec4 c;
+const vec3 SUN = vec3(-0.5845, 0.5632, 0.5845);
+float dens(vec3 q){
+  vec2 p = q.xz/R;
+  float r = length(p);
+  if (r > 1.0) return 0.0;
+  float th = atan(p.y, p.x);
+  float a = th + tm*spin*(1.2 - 0.6*r);
+  float arms = 0.5 + 0.5*sin(3.0*a - 6.0*log(r + 0.04) + seed);
+  vec2 pr = vec2(cos(a), sin(a))*r;
+  float n1 = texture(noise, pr*1.6 + vec2(seed*0.13, 0.3)).r;
+  float n2 = texture(noise, pr*5.0 + vec2(0.7, seed*0.07)).g;
+  float wall = exp(-pow((r - eyer*1.25)/(eyer*0.7), 2.0));
+  arms = smoothstep(0.30, 0.85, arms);
+  float core = 1.0 - smoothstep(0.22, 0.48, r);
+  float d = (core*0.95 + arms*(1.0 - core)*1.0) * (0.55 + 0.7*n1) * (0.75 + 0.5*n2) + wall*1.3;
+  d *= smoothstep(eyer*0.75, eyer*1.1, r) * (1.0 - smoothstep(0.6 + 0.3*n1, 1.0, r));
+  float top = Hh*(0.35 + 0.65*(1.0 - r*r))*(0.8 + 0.4*n2);
+  float bot = Hh*0.08*(1.0 + n1);
+  return d * smoothstep(bot, bot + Hh*0.06, q.y) * (1.0 - smoothstep(top - Hh*0.08, top, q.y));
+}
+void main(){
+  vec3 ro = eye - cen; vec3 rd = normalize(vp - eye);
+  vec3 bmin = vec3(-R, 0.0, -R), bmax = vec3(R, Hh, R);
+  vec3 inv = 1.0/rd; vec3 t0 = (bmin - ro)*inv, t1 = (bmax - ro)*inv;
+  vec3 tmn = min(t0, t1), tmx = max(t0, t1);
+  float ta = max(max(tmn.x, tmn.y), max(tmn.z, 0.0)), tb = min(min(tmx.x, tmx.y), tmx.z);
+  if (tb <= ta) discard;
+  const int N = 72;
+  float dt = (tb - ta)/float(N);
+  float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)))*43758.5453);
+  vec3 C = vec3(0.0); float A = 0.0;
+  for (int i = 0; i < N; i++) {
+    vec3 q = ro + rd*(ta + (float(i) + jit)*dt);
+    float d = dens(q);
+    if (d < 0.01) continue;
+    float a = 1.0 - exp(-d*dt/Hh*3.2);
+    float occ = dens(q + SUN*Hh*0.35);
+    float lit = exp(-occ*1.2);
+    vec3 col = mix(vec3(0.55,0.58,0.64), vec3(1.0,1.0,1.0), clamp(q.y/Hh*1.4, 0.0, 1.0)) * (0.62 + 0.42*lit);
+    C += (1.0 - A)*a*col; A += (1.0 - A)*a;
+    if (A > 0.985) break;
+  }
+  if (A < 0.004) discard;
+  c = vec4(C*alpha, A*alpha);
+}"""
+
 VS_PUFF = """#version 330
 uniform mat4 mvp; uniform vec3 cen; uniform float spin; uniform float tm;
 in vec3 p; in vec4 ia; in float ib;          // ia = (radius_frac_x, y, radius_frac_z, size), ib = shade
@@ -1137,6 +1188,7 @@ class MiniScene:
         self.tree_mesh = self._tree_meshes()
         self.p_fun = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_FUN)
         self.p_cloudv = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_CLOUDV)
+        self.p_hurr = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_HURR)
         cb = np.array([[-1, 0, -1], [1, 0, -1], [1, 1, -1], [-1, 1, -1], [-1, 0, 1], [1, 0, 1], [1, 1, 1], [-1, 1, 1]], "f4")
         ci = np.array([0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5], "i4")
         tri = cb[ci.reshape(-1, 3)]
@@ -1148,6 +1200,7 @@ class MiniScene:
         ci = ci.ravel().astype("i4")
         self.vao_fun = ctx.vertex_array(self.p_fun, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
         self.vao_cloudv = ctx.vertex_array(self.p_cloudv, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
+        self.vao_hurr = ctx.vertex_array(self.p_hurr, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
         sv, sf = _icosphere(2)
         self.p_puff = ctx.program(vertex_shader=VS_PUFF, fragment_shader=FS_PUFF)
         self.puff_vb = ctx.buffer(sv.tobytes())
@@ -1352,7 +1405,7 @@ class MiniScene:
         return np.array(P, "f4")
 
     # ---- frame
-    def render(self, cam, tm=0.0, dim=1.0, ovl_alpha=1.0, vortices=(), bars=(), local=None, **_):
+    def render(self, cam, tm=0.0, dim=1.0, ovl_alpha=1.0, vortices=(), bars=(), local=None, hurricanes=(), **_):
         """local: dict(key, pa, pb (world x/z), hw, along, clen (world), storm=(x,z,r,s), funnel=dict(pos, H, r0, alpha), cloud=dict(r, base, alpha))"""
         ctx, mgl = self.ctx, self.mgl
         R = self.use_town(local["key"]) if local else None
@@ -1463,6 +1516,8 @@ class MiniScene:
             f = dict(H=sz, r0=sz * 0.10, alpha=al, dark=1.0, dusty=0.6, flare=0.0)
             c = np.array([x, y * yscale, z])
             self._funnel(M0, eye, c, f, tm)
+        for hu in hurricanes:
+            self._hurricane(M0, eye, hu, tm)
         ctx.disable(mgl.BLEND)
         ctx.copy_framebuffer(self.out, self.msaa)
         raw = self.out.read(components=3)
@@ -1493,6 +1548,26 @@ class MiniScene:
                          flare=float(f.get("flare", 1.0))).items():
             _set(p, k, v)
         self.vao_fun.render()
+        ctx.disable(mgl.CULL_FACE)
+        self.msaa.depth_mask = True
+
+    def _hurricane(self, M, eye, hu, tm):
+        """hu: dict(pos=(x, y, z) world (y = cloud base), R, H, alpha, eye (fraction of R), seed)"""
+        ctx, mgl = self.ctx, self.mgl
+        ctx.blend_func = mgl.ONE, mgl.ONE_MINUS_SRC_ALPHA
+        self.msaa.depth_mask = False
+        ctx.enable(mgl.CULL_FACE)
+        ctx.cull_face = "front"
+        ctx.disable(mgl.DEPTH_TEST)
+        p = self.p_hurr
+        p["mvp"].write(_b(M))
+        for k, v in dict(tm=float(tm), eye=tuple(float(x) for x in eye), noise=3, cen=tuple(float(x) for x in hu["pos"]), R=float(hu["R"]),
+                         Hh=float(hu["H"]), alpha=float(hu["alpha"]), spin=float(hu.get("spin", 0.35)), eyer=float(hu.get("eye", 0.07)),
+                         seed=float(hu.get("seed", 0.0))).items():
+            _set(p, k, v)
+        self.vao_hurr.render()
+        ctx.cull_face = "back"
+        ctx.enable(mgl.DEPTH_TEST)
         ctx.disable(mgl.CULL_FACE)
         self.msaa.depth_mask = True
 
