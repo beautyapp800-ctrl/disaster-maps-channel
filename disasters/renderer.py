@@ -280,7 +280,7 @@ class Painter:
 
 # ---------------------------------------------------------------- camera director (soft shake only on F5 close-ups)
 class Director:
-    REG_DIST, LOC_DIST = 1.0, 0.03
+    REG_DIST, LOC_DIST = 1.0, 0.014
 
     def __init__(self, D: Data, TL: Timeline):
         from . import world
@@ -366,7 +366,7 @@ class Director:
             f = self.vortex_frac(e["key"], p["t0"] + tt, p["t0"])
             v = self.pos(e["key"], f)
             c = town + (v - town) * 0.65
-            return Cam(c[0], c[1], c[2], ld, 36.0 if has_local else 34.0, yaw)
+            return Cam(c[0], c[1], c[2], ld, 33.0 if has_local else 34.0, yaw)
 
         mid = info["mid"]
         reg2 = Cam(mid[0], mid[1], mid[2], max(1.0, info["ext"] * 2.6 + 0.5), 46.0, yaw)
@@ -554,7 +554,7 @@ class Renderer:
         L = info["local"]
         if L is None:
             return None
-        a = float(np.clip((0.40 - cam.dist) / 0.25, 0.0, 1.0))
+        a = float(np.clip((0.45 - cam.dist) / 0.3, 0.0, 1.0))
         if a <= 0.01:
             return None
         D = self.D
@@ -570,7 +570,7 @@ class Renderer:
         pb = FR.world(D.elon[i], D.elat[i])
         Lw = math.hypot(pb[0] - pa[0], pb[1] - pa[1])
         return dict(key=e["key"], alpha=a, swath=((au, av), (bu, bv), half_m / win_h_m, Lp * f),
-                    bpath=((float(pa[0]), float(pa[1])), (float(pb[0]), float(pb[1])), half_m / self.M_PER_UNIT, Lw * f), bscale=2.5)
+                    bpath=((float(pa[0]), float(pa[1])), (float(pb[0]), float(pb[1])), half_m / self.M_PER_UNIT, Lw * f), bscale=4.0)
 
     def frame(self, n):
         D, TL, P = self.D, self.TL, self.painter
@@ -582,7 +582,7 @@ class Renderer:
         cam = self.dir.cam(t)
         self.scene.set_overlay(tex)
         kz = min(1.0, max(0.0, (3.2 - cam.dist) / 1.6))
-        ovl_alpha = 1.0 - 0.8 * kz if mode == "main" else 1.0
+        ovl_alpha = (1.0 - 0.75 * kz) * min(1.0, max(0.0, (cam.dist - 0.25) / 0.75)) if mode == "main" else 1.0
         vort, bars = [], []
         if mode == "main":
             vort = self._vortices(t, ph, cam)

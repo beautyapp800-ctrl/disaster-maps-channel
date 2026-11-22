@@ -31,11 +31,13 @@ const vec3 HAZE = vec3(0.80, 0.89, 0.97);
 float cloudAt(vec2 p){
   float a = texture(noise, p*0.33 + wind*tm).r;
   float b = texture(noise, p*1.05 + wind*tm*1.7 + vec2(0.37,0.11)).g;
-  return smoothstep(0.60, 0.86, a*0.68 + b*0.32);
+  return smoothstep(0.66, 0.90, a*0.68 + b*0.32);
 }
 vec3 fogged(vec3 col, vec3 p){
   float d = length(p - eye);
-  float f = smoothstep(camdist*0.95, camdist*2.8, d) * 0.6;
+  float near = camdist < 0.2 ? 0.55 : 0.95;
+  float far = camdist < 0.2 ? 1.6 : 2.8;
+  float f = smoothstep(camdist*near, camdist*far, d) * (camdist < 0.2 ? 0.85 : 0.6);
   return mix(col, HAZE, f);
 }
 """
@@ -56,14 +58,14 @@ void main(){
   vec3 a = texture(aux, uv).rgb;
   vec3 col;
   if (a.r > 0.5) {
-    vec2 q = vp.xz*38.0;
-    float h1 = texture(noise, q + vec2(tm*0.010, tm*0.006)).r;
-    float h2 = texture(noise, q*1.7 + vec2(-tm*0.008, tm*0.011)).g;
-    vec3 wn = normalize(vec3((h1-0.5)*0.9, 1.0, (h2-0.5)*0.9));
+    vec2 q = vp.xz*1.1;
+    float h1 = texture(noise, q + vec2(tm*0.0015, tm*0.001)).r;
+    float h2 = texture(noise, q*2.3 + vec2(-tm*0.0012, tm*0.0016)).g;
+    vec3 wn = normalize(vec3((h1-0.5)*0.35, 1.0, (h2-0.5)*0.35));
     vec3 v = normalize(eye - vp);
-    float spec = pow(max(dot(reflect(-SUN, wn), v), 0.0), 70.0);
+    float spec = pow(max(dot(reflect(-SUN, wn), v), 0.0), 40.0);
     col = mix(vec3(0.06,0.36,0.72), vec3(0.20,0.66,0.86), a.g);
-    col += spec*0.9 + (h1-0.5)*0.06;
+    col += spec*0.25;
     float foam = smoothstep(0.55, 0.95, a.g) * (0.5+0.5*sin(tm*1.6 - a.g*30.0 + h1*7.0));
     col = mix(col, vec3(0.97), foam*0.45);
   } else {
@@ -97,7 +99,7 @@ void main(){
   float k = cloudAt(vp.xz);
   float rim = cloudAt(vp.xz + SUN.xz*0.01);
   vec3 col = mix(vec3(0.82,0.85,0.90), vec3(1.0), clamp(1.0 - (rim-k)*3.0, 0.0, 1.0));
-  c = vec4(fogged(col, vp), k*0.82*cloud_amt);
+  c = vec4(fogged(col, vp), k*0.7*cloud_amt);
 }"""
 
 VS_PATCH = """#version 330
@@ -162,9 +164,9 @@ uniform float tm; uniform float alpha; in vec2 vah; in vec3 vp; out vec4 c;
 void main(){ float a=vah.x, h=vah.y;
   float band = 0.5+0.5*sin(a*5.0 + h*26.0 - tm*16.0);
   float rim = 0.62+0.38*max(0.0, cos(a-0.9));
-  vec3 col = mix(vec3(0.30,0.30,0.33), vec3(0.86,0.86,0.90), band*0.6+0.25*h) * rim;
+  vec3 col = mix(vec3(0.42,0.42,0.46), vec3(0.88,0.88,0.92), band*0.5+0.3*h) * rim;
   col = mix(col, vec3(0.45,0.37,0.30), (1.0-smoothstep(0.0, 0.25, h))*0.6);
-  c = vec4(col, alpha*(0.80+0.2*h)); }"""
+  c = vec4(col, alpha*(0.62+0.3*h)); }"""
 VS_DISC = """#version 330
 uniform mat4 mvp; uniform vec3 off; uniform float sc; in vec3 p; out float vr;
 void main(){ vr=length(p.xz); gl_Position = mvp*vec4(off + p*sc, 1.0); }"""
