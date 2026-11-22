@@ -1,0 +1,115 @@
+name: pilot
+# Manual only (automation stays OFF until the owner says ok). Renders "Every Tornado in US History Mapped".
+# Parallel segments on the runner (OpenGL on the CPU), then assemble + QA. max-parallel 6 keeps the account's 20-job limit free.
+on:
+  workflow_dispatch:
+    inputs:
+      res:
+        description: "video height (2160 = 4K, 1080, 360 = smoke test)"
+        default: "2160"
+      texw:
+        description: "map texture width (4096 for 4K/1080p, 1024 for smoke)"
+        default: "4096"
+      segments:
+        description: "number of parallel segments"
+        default: "24"
+      crf:
+        default: "20"
+concurrency:
+  group: disaster-render
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  covers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp moderngl
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
+      - name: NOAA SPC tornado database 1950-2025 (public domain)
+        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - name: Three covers, automatic choice
+        env:
+          RES: "1440"
+          TEXW: "4096"
+        run: python -m disasters.covers out/covers
+      - uses: actions/upload-artifact@v4
+        with:
+          name: covers
+          path: out/covers
+          retention-days: 30
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: python3 -c "import json,os;n=int('${{ inputs.segments }}');open(os.environ['GITHUB_OUTPUT'],'a').write('matrix='+json.dumps(list(range(n)))+'\n')"
+  render:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        seg: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp moderngl
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
+      - name: NOAA SPC tornado database 1950-2025 (public domain)
+        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - name: Render segment
+        env:
+          RES: ${{ inputs.res }}
+          TEXW: ${{ inputs.texw }}
+        run: python -m disasters.renderer --seg ${{ matrix.seg }} --of ${{ inputs.segments }} --out out/seg --crf ${{ inputs.crf }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seg-${{ matrix.seg }}
+          path: out/seg
+          retention-days: 7
+  assemble:
+    needs: [render]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: NOAA SPC tornado database (for the independent QA)
+        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: seg-*
+          path: segs
+      - name: Assemble, music -14 LUFS, verify, QA
+        run: |
+          EXP=$(python3 scripts/total_seconds.py)
+          python scripts/assemble.py segs out/final $EXP ${{ inputs.res }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: review
+          path: |
+            out/final/preview_480p.mp4
+            out/final/contact_sheet.jpg
+            out/final/qa_report.md
+            out/final/verify.json
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: out/final/final.mp4
+          retention-days: 14
+          compression-level: 0
