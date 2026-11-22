@@ -2,9 +2,9 @@
 
 Result: **PASS**
 
-- frames logged: 14208 (592.0 s)
-- counter/legend/deaths sync checks vs raw CSV: 12528 frames
-- 1-second pixel checks (no stripes, no dark holes, map not empty): 592 frames
+- frames logged: 14736 (614.0 s)
+- counter/legend/deaths sync checks vs raw CSV: 13056 frames
+- 1-second pixel checks (no stripes, no dark holes, map not empty): 614 frames
 - layout: no overlapping panels, no transient element shorter than 1.5 s, no blink gaps shorter than 1 s
 - failures: 0
 

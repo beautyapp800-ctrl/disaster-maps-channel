@@ -1,14 +1,14 @@
 {
- "loudness_lufs": -14.2,
- "true_peak_dbfs": -1.7,
- "duration_s": 592.0,
+ "loudness_lufs": -14.1,
+ "true_peak_dbfs": -2.7,
+ "duration_s": 613.999023,
  "video": {
   "codec_name": "h264",
   "width": 3840,
   "height": 2160,
   "r_frame_rate": "24/1",
-  "duration": "592.000000"
+  "duration": "613.999023"
  },
- "size_mb": 1484.9,
+ "size_mb": 1717.0,
  "fails": []
 }
