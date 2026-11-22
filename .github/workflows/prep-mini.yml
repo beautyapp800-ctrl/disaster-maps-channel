@@ -1,0 +1,41 @@
+name: prep-mini
+# Data for the stylized 'miniature world' look: NLCD land cover, USGS 3DEP hillshade, OpenStreetMap features.
+# Results go to the orphan branch data-mini (keeps big rasters out of dev/main); render jobs overlay it with
+#   git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "nation region osm (space separated) + optional town keys"
+        default: "nation region osm"
+permissions:
+  contents: write
+jobs:
+  nation:
+    if: contains(inputs.what, 'nation')
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp
+      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - run: python scripts/prep_mini.py nation
+      - name: Commit to data-mini
+        if: always()
+        run: bash scripts/push_data_mini.sh "prep-mini nation" data/world/nlcd_8192.png data/world/hs_8192.jpg
+  towns:
+    if: contains(inputs.what, 'region') || contains(inputs.what, 'osm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp
+      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - run: python scripts/prep_mini.py $(echo "${{ inputs.what }}" | sed 's/nation//')
+      - name: Commit to data-mini
+        if: always()
+        run: bash scripts/push_data_mini.sh "prep-mini ${{ inputs.what }}" data/region data/osm
