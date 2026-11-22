@@ -43,7 +43,7 @@ EVENTS = [
 
 # flood level used for the close-up picture only (metres above USGS 3DEP ground, never shown as a number);
 # conservative values below the peak storm tide in the NHC Tropical Cyclone Reports / NWS event pages (sources.json: surge_visual)
-SURGE_M = {"galveston1900": 4.0, "laborday1935": 4.5, "newengland1938": 3.5, "camille1969": 6.0, "andrew1992": 4.0, "katrina2005": 7.0,
+SURGE_M = {"galveston1900": 4.0, "laborday1935": 4.5, "newengland1938": 3.5, "camille1969": 6.0, "andrew1992": 2.0, "katrina2005": 7.0,
            "harvey2017": 3.0, "michael2018": 4.0, "ian2022": 3.5, "helene2024": 3.5}
 
 
