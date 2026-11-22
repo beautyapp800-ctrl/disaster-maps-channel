@@ -34,6 +34,32 @@ def tornado_us(slug):
     return dict(title=title, description=desc, tags=tags, categoryId="27", madeForKids=False, containsSyntheticMedia=False, defaultLanguage="en")
 
 
+def hurricanes_us(slug):
+    from .hurricane import Data as HData
+    D = HData()
+    n5 = int((D.cat == 5).sum())
+    title = f"Every Hurricane That Hit America, Mapped: {D.n} Hurricanes (1851-2025)"
+    famous = ", ".join(f"{e['title'].title().replace(' · ', ' ')} {int(e['date'])}" for e in D.events)
+    music = json.load(open("data/music/tracks.json", encoding="utf-8"))["tracks"]
+    desc = (f"Every hurricane that came ashore on the US mainland from 1851 to 2025, mapped track by track from the NOAA National Hurricane Center "
+            f"best-track database (HURDAT2): {D.n} hurricanes, {int((D.cat >= 3).sum())} of them major (Category 3 to 5) at landfall, "
+            f"and only {n5} at Category 5.\n"
+            f"Up close: {famous}.\n\n"
+            "How the map counts: a storm is included when HURDAT2 records a landfall on the lower 48 states while it was a hurricane; "
+            "the category is the strongest one at a US landfall. Storm-surge flooding in the close-ups is illustrative.\n\n"
+            "Sources (public data):\n"
+            "Hurricane tracks and winds: NOAA National Hurricane Center, HURDAT2 Atlantic best-track data (nhc.noaa.gov/data)\n"
+            "Land cover: USGS \nCD 2021 (MRLC). Elevation: USGS 3DEP and NOAA ETOPO1. Outside the US: NASA Blue Marble Next Generation (NASA GIBS)\n"
+            "Towns, streets, buildings and place names: (c) OpenStreetMap contributors, ODbL (openstreetmap.org/copyright). Today's streets, shown in illustrative 3D.\n"
+            "Borders: US Census Bureau, Natural Earth.\n"
+            "Music (CC0, OpenGameArt): " + "; ".join(f"{t['title']} by {t['creator']}" for t in music) + ". Sound effects made for this video.\n\n"
+            "#hurricane #weather #map #NOAA #history\n"
+            f"[ref: {CHANNEL_REF}/{slug}]")
+    tags = ["hurricane", "hurricanes", "every hurricane", "hurricane map", "hurricane history", "Katrina", "Andrew", "Camille", "Michael",
+            "Ian", "Helene", "storm surge", "NOAA", "National Hurricane Center", "map animation"]
+    return dict(title=title, description=desc, tags=tags, categoryId="27", madeForKids=False, containsSyntheticMedia=False, defaultLanguage="en")
+
+
 def problems(m):
     p = []
     if len(m["title"]) > 70:
@@ -50,7 +76,7 @@ def problems(m):
 
 if __name__ == "__main__":
     slug = sys.argv[1]
-    m = {"us-tornadoes-1950-2025": tornado_us}[slug](slug)
+    m = {"us-tornadoes-1950-2025": tornado_us, "us-hurricane-landfalls-1851-2025": hurricanes_us}[slug](slug)
     pr = problems(m)
     print(json.dumps(m, indent=1, ensure_ascii=False))
     if pr:

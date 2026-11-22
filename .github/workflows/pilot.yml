@@ -29,7 +29,6 @@ permissions:
   contents: write
 jobs:
   covers:
-    if: inputs.engine != 'hurricane'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -46,7 +45,7 @@ jobs:
         env:
           RES: "1440"
           TEXW: "4096"
-        run: python -m disasters.covers out/covers
+        run: python -m ${{ inputs.engine == 'hurricane' && 'disasters.hcovers' || 'disasters.covers' }} out/covers
       - uses: actions/upload-artifact@v4
         with:
           name: covers
