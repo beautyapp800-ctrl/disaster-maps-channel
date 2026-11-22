@@ -13,3 +13,5 @@ data/osm/
 data/region/
 data/world/nlcd_8192.png
 data/world/hs_8192.jpg
+logs/
+data/world/outer_4096.jpg

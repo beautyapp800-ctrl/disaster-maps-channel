@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
-      - run: pip install numpy pillow pyshp
+      - run: pip install numpy pillow pyshp shapely
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
       - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
       - uses: actions/download-artifact@v4

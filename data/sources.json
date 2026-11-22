@@ -50,7 +50,7 @@
   "usgs_3dep": {
    "title": "USGS 3D Elevation Program (relief for 3D scenes)",
    "publisher": "U.S. Geological Survey",
-   "data": "prd-tnm.s3.amazonaws.com StagedProducts/Elevation",
+   "data": "elevation.nationalmap.gov 3DEPElevation ImageServer (hillshade + elevation for storm surge)",
    "licence": "U.S. public domain",
    "licence_confirmed": true
   },
@@ -144,21 +144,39 @@
    "publisher": "NASA / NOAA Suomi NPP VIIRS",
    "data": "gibs.earthdata.nasa.gov",
    "licence": "NASA imagery, openly available without restriction; credit NASA",
-   "licence_confirmed": true
+   "licence_confirmed": true,
+   "note": "not used since the miniature-world style (23.11)"
   },
   "usgs_naip": {
    "title": "USGS The National Map orthoimagery (USGSImageryOnly, NAIP)",
    "publisher": "USGS / USDA FSA",
    "data": "basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer",
    "licence": "US Government work, public domain; credit USGS The National Map",
-   "licence_confirmed": true
+   "licence_confirmed": true,
+   "note": "not used since the miniature-world style (23.11)"
   },
   "osm_buildings": {
-   "title": "OpenStreetMap building footprints",
+   "title": "OpenStreetMap: buildings, streets, land use, water, place names",
    "publisher": "OpenStreetMap contributors",
    "data": "Overpass API",
    "licence": "ODbL 1.0 - attribution required: (c) OpenStreetMap contributors (in every description)",
    "licence_confirmed": true
+  },
+  "nlcd": {
+   "title": "National Land Cover Database 2021 (land cover classes for the stylized map)",
+   "publisher": "USGS / Multi-Resolution Land Characteristics Consortium",
+   "data": "mrlc.gov geoserver WMS NLCD_2021_Land_Cover_L48",
+   "licence": "USGS public domain; no restrictions (mrlc.gov data are public domain)",
+   "licence_confirmed": true,
+   "note": "fetched on the owner's PC (the MRLC server refuses GitHub runner addresses)"
+  },
+  "surge_visual": {
+   "title": "Storm-surge flooding in the hurricane close-ups (picture only, no number on screen)",
+   "publisher": "NOAA NHC Tropical Cyclone Reports (nhc.noaa.gov/data/tcr) and NWS event pages",
+   "licence": "NOAA public domain",
+   "licence_confirmed": true,
+   "rule": "flood level in metres over USGS 3DEP ground, kept below the reported peak storm tide; illustrative, never labelled as a measurement",
+   "todo": "record the TCR peak value per storm before publishing the hurricane film"
   }
  }
 }

@@ -41,6 +41,12 @@ EVENTS = [
 ]
 
 
+# flood level used for the close-up picture only (metres above USGS 3DEP ground, never shown as a number);
+# conservative values below the peak storm tide in the NHC Tropical Cyclone Reports / NWS event pages (sources.json: surge_visual)
+SURGE_M = {"galveston1900": 4.0, "laborday1935": 4.5, "newengland1938": 3.5, "camille1969": 6.0, "andrew1992": 4.0, "katrina2005": 7.0,
+           "harvey2017": 3.0, "michael2018": 4.0, "ian2022": 3.5, "helene2024": 3.5}
+
+
 def category(kt):
     return 5 if kt >= 137 else 4 if kt >= 113 else 3 if kt >= 96 else 2 if kt >= 83 else 1 if kt >= 64 else 0
 
@@ -130,7 +136,7 @@ class Data:
             s = self.storms[i]
             k = min(s.landfalls, key=lambda k: (s.lat[k] - town[0]) ** 2 + (s.lon[k] - town[1]) ** 2)
             self.events.append(dict(key=key, idx=i, title=title, town=town, lf=k, kt=int(s.wind[k]), cat=category(s.wind[k]),
-                                    date=s.t[k]))
+                                    date=s.t[k], surge_m=SURGE_M.get(key, 3.0)))
         self.events.sort(key=lambda e: e["date"])
 
     def count_by_cat(self, mask=None):

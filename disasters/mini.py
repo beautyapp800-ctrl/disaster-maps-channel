@@ -598,6 +598,16 @@ uniform float tm; uniform vec3 eye; uniform float camdist; uniform float mpu;
 uniform sampler2D noise;
 uniform float shadow_on; uniform mat4 lmvp; uniform sampler2DShadow smap; uniform float sbias; uniform float stex;
 uniform vec4 storm;   // x, z (same frame as vp), radius, strength
+uniform sampler2D dem; uniform float demsize; uniform float surge;   // storm surge: water level (m) over USGS 3DEP ground (m)
+float demAt(vec2 lxz){
+  vec2 uv = lxz/demsize + 0.5;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1e4;
+  return texture(dem, uv).r;
+}
+vec3 floodCol(vec2 m, float tmv){
+  float w = texture(noise, m/55.0 + vec2(tmv*0.02, tmv*0.013)).r;
+  return mix(vec3(0.30,0.38,0.38), vec3(0.42,0.50,0.50), w);
+}
 const vec3 SUN = vec3(-0.5845, 0.5632, 0.5845);
 const vec3 SUNC = vec3(1.0, 0.96, 0.88);
 const vec3 AMB = vec3(0.70, 0.78, 0.92);
@@ -694,6 +704,14 @@ void main(){
     rub = mix(rub, vec3(0.62,0.30,0.22), step(0.82, r2)*0.6);
     col = mix(col, rub*mix(0.65, 1.0, sh), inside*0.85);
   }
+  if (surge > 0.0) {
+    float dh = surge - demAt(lxz);
+    if (dh > 0.0) {
+      vec3 fc = floodCol(m, tm) * mix(0.70, 1.0, sh);
+      float foam = (1.0 - smoothstep(0.0, 0.35, dh)) * (0.6 + 0.4*texture(noise, m/8.0 + tm*0.05).g);
+      col = mix(fc, vec3(0.92,0.93,0.90), foam*0.7);
+    }
+  }
   vec4 o = texture(ovl, uv);
   col = mix(col, o.rgb, o.a*ovl_alpha*step(0.0, e));
   col *= 1.0 - 0.45*stormAt(lp);
@@ -712,8 +730,9 @@ void main(){ vec3 s = mix(vec3(0.78,0.88,0.98), vec3(0.36,0.62,0.93), smoothstep
 
 VS_BLD = """#version 330
 uniform mat4 mvp; uniform float yscale; uniform vec2 pa; uniform vec2 pb; uniform float hw; uniform float along; uniform float clen;
+uniform float wind; uniform float mpu;
 in vec3 p; in vec3 n; in vec2 wuv; in vec4 info; in vec3 bc;
-out vec3 vn; out vec2 vwuv; flat out vec4 vinfo; out vec3 vp; out float vdmg;
+out vec3 vn; out vec2 vwuv; flat out vec4 vinfo; out vec3 vp; out float vdmg; out float vag; flat out float vlost;
 void main(){
   vec2 ab = pb - pa; float L = max(length(ab), 1e-12); vec2 dir = ab/L;
   vec2 rel = bc.xy - pa; float s = dot(rel, dir); float d = abs(dot(rel, vec2(-dir.y, dir.x)));
@@ -722,15 +741,17 @@ void main(){
   float dmg = k*sev;
   float yl = p.y - bc.z;
   float hk = fract(sin(info.x*91.7)*437.5);
+  float lost = (info.w > 0.5 && info.y < 1.5) ? step(hk, wind*0.42) : 0.0;
+  if (lost > 0.5) yl = min(yl, info.z/mpu);
   vec3 q = vec3(p.x, bc.z*yscale + yl*mix(1.0, 0.10 + 0.25*hk, dmg), p.z);
   q.xz += (q.xz - bc.xy)*0.15*dmg + dir*yl*0.35*dmg*hk;
   vp = q; gl_Position = mvp*vec4(q, 1.0);
-  vn = n; vwuv = wuv; vinfo = info; vdmg = dmg;
+  vn = lost > 0.5 ? vec3(0.0, 1.0, 0.0) : n; vwuv = wuv; vinfo = info; vdmg = dmg; vag = (q.y - bc.z*yscale)*mpu; vlost = lost;
 }"""
 FS_BLD = """#version 330
 """ + COMMON + """
 uniform float alpha;
-in vec3 vn; in vec2 vwuv; flat in vec4 vinfo; in vec3 vp; in float vdmg; out vec4 c;
+in vec3 vn; in vec2 vwuv; flat in vec4 vinfo; in vec3 vp; in float vdmg; in float vag; flat in float vlost; out vec4 c;
 vec3 pick(float h, vec3 a, vec3 b, vec3 cc, vec3 d, vec3 e){ return h < 0.2 ? a : (h < 0.4 ? b : (h < 0.6 ? cc : (h < 0.8 ? d : e))); }
 float grid(float x, float period, float w, float fw){ float f = fract(x/period); float hw = w/period*0.5;
   float aa = clamp(fw/period, 0.0005, 0.5); return smoothstep(0.5-hw-aa, 0.5-hw+aa, f) * (1.0 - smoothstep(0.5+hw-aa, 0.5+hw+aa, f)); }
@@ -778,17 +799,25 @@ void main(){
     occ = 0.72 + 0.28*smoothstep(0.0, 2.5, v);
   }
   col = mix(col, mix(vec3(0.46,0.38,0.30), vec3(0.62,0.58,0.52), h3), vdmg*0.85);
+  if (vlost > 0.5) col = mix(vec3(0.55,0.44,0.32), vec3(0.66,0.58,0.48), h3);
   float sh = shadowAt(vp, n);
   col = light(col, n, sh, occ) * 1.12;
   col *= 1.0 - 0.45*stormAt(vp);
+  if (surge > 0.0) {
+    float gh = demAt(vp.xz);
+    float dh = surge - (gh + vag);
+    if (dh > 0.0) col = mix(col, floodCol(vp.xz*mpu, tm)*0.85, 0.88);
+    col = mix(col, vec3(0.92,0.93,0.90), (1.0 - smoothstep(0.0, 0.25, abs(dh)))*0.5*step(0.0, surge - gh));
+  }
   c = vec4(col, alpha);
 }"""
 
 VS_TREE = """#version 330
 uniform mat4 mvp; uniform float yscale; uniform vec2 pa; uniform vec2 pb; uniform float hw; uniform float along; uniform float clen;
+uniform float wind; uniform vec2 wdir; uniform float tm; uniform float mpu;
 in vec3 p; in vec3 n; in float part;            // unit tree: trunk part 0, crown part 1 (crown centred at y=0.62, radius 1)
 in vec4 ia; in vec4 ib;                          // ia = (x, z, base_y, height); ib = (crown, conifer, hue, rot)
-out vec3 vn; out vec3 vp; flat out float vpart; flat out float vhue; out float vdmg;
+out vec3 vn; out vec3 vp; flat out float vpart; flat out float vhue; out float vdmg; out float vag;
 void main(){
   vec2 ab = pb - pa; float L = max(length(ab), 1e-12); vec2 dir = ab/L;
   vec2 rel = ia.xy - pa; float s = dot(rel, dir); float d = abs(dot(rel, vec2(-dir.y, dir.x)));
@@ -804,15 +833,18 @@ void main(){
   float yy = q.y;
   q.y = yy*cos(fall) * mix(1.0, 0.6, dmg);
   q.xz += fd*yy*sin(fall);
+  float hf = clamp(yy/max(ia.w, 1e-9), 0.0, 1.5);
+  q.xz += wdir*wind*ia.w*hf*hf*(0.16 + 0.07*sin(tm*2.7 + ia.x*9.0e4 + ia.y*7.0e4));
   vec3 w = vec3(ia.x + q.x, ia.z*yscale + q.y, ia.y + q.z);
   vp = w; gl_Position = mvp*vec4(w, 1.0);
-  vn = vec3(n.x*ca - n.z*sa, n.y, n.x*sa + n.z*ca); vpart = part; vhue = ib.z; vdmg = dmg;
+  vn = vec3(n.x*ca - n.z*sa, n.y, n.x*sa + n.z*ca); vpart = part; vhue = ib.z; vdmg = dmg; vag = q.y*mpu;
 }"""
 FS_TREE = """#version 330
 """ + COMMON + """
-in vec3 vn; in vec3 vp; flat in float vpart; flat in float vhue; in float vdmg; out vec4 c;
+in vec3 vn; in vec3 vp; flat in float vpart; flat in float vhue; in float vdmg; in float vag; out vec4 c;
 void main(){
   vec3 n = normalize(vn);
+  if (surge > 0.0 && surge - (demAt(vp.xz) + vag) > 0.0) { c = vec4(floodCol(vp.xz*mpu, tm)*0.8, 1.0); return; }
   vec3 col = vpart < 0.5 ? vec3(0.40,0.30,0.22) : mix(mix(vec3(0.30,0.56,0.20), vec3(0.42,0.66,0.24), vhue), vec3(0.22,0.46,0.22), step(0.8, vhue));
   col = mix(col, vec3(0.48,0.40,0.28), vdmg*0.8);
   float sh = shadowAt(vp, n);
@@ -989,6 +1021,25 @@ void main(){
   }
   if (A < 0.004) discard;
   c = vec4(C*alpha, A*alpha);
+}"""
+
+FS_RAIN = """#version 330
+uniform vec2 res; uniform float tm; uniform float amount; uniform float slant;
+in float vy; out vec4 c;
+float h1(float x){ return fract(sin(x*127.1)*43758.5453); }
+void main(){
+  vec2 uv = gl_FragCoord.xy/res;
+  float asp = res.x/res.y;
+  float a = 0.0;
+  for (int L = 0; L < 3; L++) {
+    float sc = 70.0 + 55.0*float(L);
+    vec2 q = vec2((uv.x*asp + uv.y*slant)*sc, uv.y*sc*0.10 + tm*(1.6 + 0.6*float(L)));
+    float col = floor(q.x);
+    float y = fract(q.y + h1(col + float(L)*31.0)*7.0);
+    float w = abs(fract(q.x) - 0.5);
+    a += smoothstep(0.0, 0.03, y)*(1.0 - smoothstep(0.05, 0.14, y)) * (1.0 - smoothstep(0.06, 0.18, w)) * (0.3 + 0.7*h1(col*3.1 + float(L)));
+  }
+  c = vec4(vec3(0.86,0.89,0.93)*a*amount*0.30, a*amount*0.30);
 }"""
 
 VS_PUFF = """#version 330
@@ -1189,6 +1240,9 @@ class MiniScene:
         self.p_fun = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_FUN)
         self.p_cloudv = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_CLOUDV)
         self.p_hurr = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_HURR)
+        self.p_rain = ctx.program(vertex_shader=VS_SKY, fragment_shader=FS_RAIN)
+        self.vao_rain = ctx.vertex_array(self.p_rain, [(ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], "f4").tobytes()), "2f", "p")])
+        self.t_dem0 = ctx.texture((2, 2), 1, np.zeros(4, "f4").tobytes(), dtype="f4")
         cb = np.array([[-1, 0, -1], [1, 0, -1], [1, 1, -1], [-1, 1, -1], [-1, 0, 1], [1, 0, 1], [1, 1, 1], [-1, 1, 1]], "f4")
         ci = np.array([0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5], "i4")
         tri = cb[ci.reshape(-1, 3)]
@@ -1353,6 +1407,12 @@ class MiniScene:
                 buf = ctx.buffer(data.tobytes())
                 R["vao_br"] = _vao(ctx, self.p_bld, [(buf, "3f 3f 2f 4f 3f", "p", "n", "wuv", "info", "bc")])
                 R["nbr"] = len(data)
+        dz = ROOT / "data" / "region" / f"{key}_dem.npz"
+        if dz.exists():
+            d = np.load(dz)
+            z = d["z"].astype("f4")
+            R["dem"] = ctx.texture((z.shape[1], z.shape[0]), 1, np.ascontiguousarray(z).tobytes(), dtype="f4")
+            R["demsize"] = float(d["km"]) / KM_PER_UNIT
         tr = T.trees(crop)
         if len(tr):
             R["trees"] = tr
@@ -1375,6 +1435,8 @@ class MiniScene:
             return
         for t in self.town["tex"].values():
             t.release()
+        if "dem" in self.town:
+            self.town["dem"].release()
         for k, v in list(self.town.items()):
             if k.startswith("vao"):
                 v.release()
@@ -1443,6 +1505,12 @@ class MiniScene:
         self.t_ovl.use(5)
         self.t_noise.use(3)
         self.smap.use(6)
+        (R["dem"] if R is not None and "dem" in R else self.t_dem0).use(12)
+        surge_m = float(local.get("surge", {}).get("level", 0.0)) if local else 0.0
+        if R is None or "dem" not in R:
+            surge_m = 0.0
+        common.update(dem=12, demsize=float(R.get("demsize", 1.0)) if R is not None else 1.0, surge=surge_m,
+                      wind=float(local.get("wind", 0.0)) if local else 0.0, wdir=(0.8, -0.6))
         pt = self.p_ter
         pt["mvp"].write(_b(M0))
         lvon = [0.0, 0.0, 0.0, 0.0]
@@ -1512,6 +1580,17 @@ class MiniScene:
             cl = local.get("cloud")
             if cl and cl["alpha"] > 0.01:
                 self._cloud(Ml, eye_l, c, cl, tm)
+        if local and local.get("cloud") and not local.get("funnel") and local["cloud"]["alpha"] > 0.01:
+            cp = local.get("cloud_pos", (O[0], 0.0, O[2]))
+            c = np.array([cp[0], cp[1] * yscale, cp[2]]) - O
+            self._cloud(Ml, eye_l, c, local["cloud"], tm)
+        if local and local.get("rain", 0) > 0.01:
+            ctx.blend_func = mgl.ONE, mgl.ONE_MINUS_SRC_ALPHA
+            ctx.disable(mgl.DEPTH_TEST)
+            for k, v in dict(res=(float(self.W), float(self.H)), tm=float(tm), amount=float(local["rain"]), slant=0.28).items():
+                _set(self.p_rain, k, v)
+            self.vao_rain.render(mgl.TRIANGLE_STRIP)
+            ctx.enable(mgl.DEPTH_TEST)
         for (x, y, z, sz, al) in vortices:
             f = dict(H=sz, r0=sz * 0.10, alpha=al, dark=1.0, dusty=0.6, flare=0.0)
             c = np.array([x, y * yscale, z])
@@ -1584,7 +1663,7 @@ class MiniScene:
         p = self.p_cloudv
         p["mvp"].write(_b(M))
         for k, v in dict(tm=float(tm), eye=tuple(float(x) for x in eye), noise=3, cen=(float(c[0]), float(y0), float(c[2])), R=float(cl["r"]),
-                         Hh=float(thick), alpha=float(cl["alpha"]), spin=0.06).items():
+                         Hh=float(thick), alpha=float(cl["alpha"]), spin=float(cl.get("spin", 0.06))).items():
             _set(p, k, v)
         self.vao_cloudv.render()
         ctx.cull_face = "back"
