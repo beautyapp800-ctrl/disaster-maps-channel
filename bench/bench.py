@@ -138,16 +138,8 @@ def bench_2d(rows):
 
 def etopo():
     """CONUS relief, NOAA ETOPO1 (ERDDAP etopo180, stride 3 -> 3 arc-min; production: ETOPO 2022 / USGS 3DEP)."""
-    p = ROOT / "data" / "raw" / "etopo.csv"
-    if not p.exists():
-        url = ("https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?"
-               "altitude%5B(23.5):3:(50.5)%5D%5B(-126):3:(-65)%5D")
-        subprocess.run(["curl", "-sfL", "--retry", "3", "-o", str(p), url], check=True)
-    lat, lon, z = np.loadtxt(p, delimiter=",", skiprows=2, unpack=True)
-    la, lo = np.unique(lat), np.unique(lon)
-    grid = np.full((len(la), len(lo)), np.nan)
-    grid[np.searchsorted(la, lat), np.searchsorted(lo, lon)] = z
-    return la, lo, np.nan_to_num(grid)
+    d = np.load(ROOT / "data" / "relief" / "etopo1_conus_3min.npz")
+    return d["lat"], d["lon"], d["z"].astype(float)
 
 
 def bench_3d(rows):

@@ -28,11 +28,6 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
       - name: NOAA SPC tornado database 1950-2025 (public domain, NWS)
         run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
-      - name: NOAA ETOPO1 relief (ERDDAP subset)
-        run: |
-          sleep $(( ${{ matrix.res }} == 2160 ? 20 : 0 ))
-          curl -sfL --retry 6 --retry-all-errors --retry-delay 15 -o data/raw/etopo.csv "https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?altitude%5B(23.5):3:(50.5)%5D%5B(-126):3:(-65)%5D"
-          wc -l data/raw/etopo.csv
       - name: Benchmark
         env:
           RES: ${{ matrix.res }}
