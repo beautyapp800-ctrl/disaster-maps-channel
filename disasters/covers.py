@@ -96,7 +96,7 @@ def build(out: Path):
         i = ev[key]["idx"]
         p = world3(D.slon[i], D.slat[i])
         vs.append((float(p[0]), float(p[1]), float(p[2]), 0.42, 1.0))
-    img = sc.render(Cam(-0.45, 0.0, 0.1, 3.4, 40, -8), tm=3.1, vortices=vs)
+    img = sc.render(Cam(-0.55, 0.0, 0.15, 3.9, 50, -6), tm=3.1, vortices=vs)
     img = shade_left(img)
     lay, mask, boxes = text_layer([(fmt(total), 250 * k, (40 * k, 330 * k), YEL), ("TORNADOES", 118 * k, (44 * k, 450 * k), WHITE),
                                    ("EVERY ONE MAPPED, 1950-2025", 52 * k, (46 * k, 520 * k), WHITE)])

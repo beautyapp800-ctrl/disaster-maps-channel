@@ -39,7 +39,7 @@ r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(mix), "-af", "loudnorm=I
 j = json.loads(re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr, re.S).group(0))
 print("pass1", j)
 ln = (f"loudnorm=I=-14:TP=-1.5:LRA=11:measured_I={j['input_i']}:measured_TP={j['input_tp']}:measured_LRA={j['input_lra']}"
-      f":measured_thresh={j['input_thresh']}:offset={j['target_offset']}:linear=true")
+      f":measured_thresh={j['input_thresh']}:offset={j['target_offset']}:linear=true,alimiter=limit=0.708:level=disabled")
 norm = out_dir / "mix_norm.wav"
 sh("ffmpeg", "-y", "-loglevel", "error", "-i", str(mix), "-af", ln, "-ar", "48000", str(norm))
 final = out_dir / "final.mp4"
@@ -70,7 +70,7 @@ if rc:
     fails.append("frame QA failed (see qa_report.md)")
 
 # ---- contact sheet + preview
-th = sorted(glob.glob(str(seg_dir / "**" / "thumbs" / "t*.jpg"), recursive=True))
+th = sorted(glob.glob(str(seg_dir / "**" / "thumbs" / "t*.jpg"), recursive=True), key=lambda f: int(re.search(r"t(\d+)\.jpg", f).group(1)))
 ims = [Image.open(f) for f in th]
 if ims:
     cols = 5

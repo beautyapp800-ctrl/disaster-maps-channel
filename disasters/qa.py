@@ -39,7 +39,7 @@ def main(d, report):
     cumcls = {c: np.concatenate([[0], np.cumsum(mag == c)]) for c in (-9, 0, 1, 2, 3, 4, 5)}
     cumyear = {y: int((yr <= y).sum()) for y in range(1950, 2026)}
     frames = []
-    for fn in sorted(glob.glob(f"{d}/qa_*.jsonl")):
+    for fn in sorted(glob.glob(f"{d}/**/qa_*.jsonl", recursive=True)):
         frames += [json.loads(l) for l in open(fn, encoding="utf-8")]
     frames.sort(key=lambda m: m["n"])
     fails, notes = [], []
