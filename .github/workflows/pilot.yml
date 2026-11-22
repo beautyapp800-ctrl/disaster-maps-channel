@@ -2,6 +2,12 @@ name: pilot
 # Manual only (automation stays OFF until the owner says ok). Renders "Every Tornado in US History Mapped".
 # Parallel segments on the runner (OpenGL on the CPU), then assemble + QA. max-parallel 6 keeps the account's 20-job limit free.
 on:
+  workflow_call:
+    inputs:
+      res: {type: string, default: "2160"}
+      texw: {type: string, default: "4096"}
+      segments: {type: string, default: "24"}
+      crf: {type: string, default: "20"}
   workflow_dispatch:
     inputs:
       res:
@@ -15,9 +21,6 @@ on:
         default: "24"
       crf:
         default: "20"
-concurrency:
-  group: disaster-render
-  cancel-in-progress: false
 permissions:
   contents: write
 jobs:

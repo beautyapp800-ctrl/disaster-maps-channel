@@ -1,0 +1,85 @@
+name: produce
+# Scheduled builds WITHOUT upload (owner 22.11: the YouTube channel does not exist yet).
+# Mon + Thu 05:00 UTC (no overlap with the other beautyapp800-ctrl channels: Stoic 01:17/10:43, kids 02:27/10:53/13:47).
+# Keeps a reserve of 2 ready videos + 1-2 emergency videos as DRAFT releases reserve-<slug> (visible to repo writers only).
+on:
+  schedule:
+    - cron: "0 5 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "build even when the reserve is full"
+        default: "false"
+concurrency:
+  group: disaster-render
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      slug: ${{ steps.p.outputs.slug }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          q = json.load(open("data/topic_queue.json"))["topics"]
+          rel = json.loads(subprocess.run(["gh", "release", "list", "--limit", "100", "--json", "tagName"], capture_output=True, text=True).stdout or "[]")
+          have = {r["tagName"][8:] for r in rel if r["tagName"].startswith("reserve-")}
+          try:
+              done = {e["slug"] for e in json.load(open("state/episodes.json"))}
+          except Exception:
+              done = set()
+          want = 2 + 2   # 2 regular + up to 2 emergency
+          slug = ""
+          if len(have) < want or os.environ.get("FORCE") == "true":
+              for t in q:
+                  if t["engine"].startswith("engine_pending") or t["slug"] in have or t["slug"] in done:
+                      continue
+                  slug = t["slug"]; break
+          print("reserve:", sorted(have), "next:", slug or "(nothing buildable)")
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"slug={slug}\n")
+          PY
+  build:
+    needs: plan
+    if: needs.plan.outputs.slug != ''
+    uses: ./.github/workflows/pilot.yml
+    with:
+      res: "2160"
+      texw: "4096"
+      segments: "24"
+      crf: "20"
+  store:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp
+      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv
+      - uses: actions/download-artifact@v4
+        with: {name: final-video, path: dl/video}
+      - uses: actions/download-artifact@v4
+        with: {name: covers, path: dl/covers}
+      - uses: actions/download-artifact@v4
+        with: {name: review, path: dl/review}
+      - name: Metadata check + draft release reserve-<slug>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ needs.plan.outputs.slug }}
+        run: |
+          python -m disasters.meta "$SLUG" > dl/meta.json
+          sed -i '/^PROBLEMS/d' dl/meta.json
+          SIZE=$(stat -c %s dl/video/final.mp4); echo "video bytes $SIZE"
+          test "$SIZE" -lt 2000000000
+          cp dl/covers/cover_CHOSEN.jpg dl/cover.jpg
+          gh release create "reserve-$SLUG" --draft --title "RESERVE $SLUG" --notes "Built by produce run ${{ github.run_id }}. Not uploaded (channel not created yet)." \
+            dl/video/final.mp4 dl/cover.jpg dl/meta.json dl/review/qa_report.md dl/review/verify.json dl/review/preview_480p.mp4

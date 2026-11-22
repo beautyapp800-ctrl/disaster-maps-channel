@@ -170,7 +170,7 @@ class Cam:
         p, y = math.radians(min(self.pitch, 89.0)), math.radians(self.yaw)
         tgt = np.array([self.tx, self.ty, self.tz], "f4") + np.array(self.shake, "f4")
         eye = tgt + self.dist * np.array([math.sin(y) * math.cos(p), math.sin(p), math.cos(y) * math.cos(p)], "f4")
-        return persp(self.FOV, W / H, 0.05, 40) @ look(eye, tgt)
+        return persp(self.FOV, W / H, max(1e-5, self.dist * 0.02), self.dist * 40 + 2) @ look(eye, tgt)
 
     def project(self, pts, W, H):
         """world points (N,3) -> pixel coords (N,2), depth ok mask."""

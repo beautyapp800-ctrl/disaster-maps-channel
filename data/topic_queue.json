@@ -1,0 +1,15 @@
+{
+ "note": "Topics in order. engine = renderer module that can build it; engine_pending = not built yet (no reserve build possible). Topics never repeat.",
+ "topics": [
+  {"slug": "us-tornadoes-1950-2025", "engine": "tornado_us", "title": "Every Tornado in US History Mapped: 73,458 Tornadoes (1950-2025)", "source": "spc_tornadoes"},
+  {"slug": "us-hurricane-landfalls-1851-2025", "engine": "engine_pending:hurricane", "title": "Every Hurricane That Hit America, Mapped (1851-2025)", "source": "hurdat2"},
+  {"slug": "california-earthquakes-1900-2025", "engine": "engine_pending:earthquake", "title": "Every Earthquake in California Since 1900, Mapped", "source": "usgs_comcat"},
+  {"slug": "f5-ef5-tornadoes", "engine": "engine_pending:tornado_region", "title": "Every F5 and EF5 Tornado in History, Mapped", "source": "spc_tornadoes"},
+  {"slug": "texas-tornadoes", "engine": "engine_pending:tornado_region", "title": "Every Tornado in Texas History, Mapped", "source": "spc_tornadoes"},
+  {"slug": "oklahoma-tornadoes", "engine": "engine_pending:tornado_region", "title": "Every Tornado in Oklahoma History, Mapped", "source": "spc_tornadoes"},
+  {"slug": "tornado-alley-shifting", "engine": "engine_pending:tornado_region", "title": "Tornado Alley Is Shifting: 75 Years of Tornadoes Mapped", "source": "spc_tornadoes"},
+  {"slug": "major-hurricanes-us", "engine": "engine_pending:hurricane", "title": "Every Major Hurricane (Cat 3+) to Hit the US, Mapped", "source": "hurdat2"},
+  {"slug": "florida-hurricanes", "engine": "engine_pending:hurricane", "title": "Every Hurricane to Hit Florida, Mapped", "source": "hurdat2"},
+  {"slug": "alaska-earthquakes-1900-2025", "engine": "engine_pending:earthquake", "title": "Every Earthquake in Alaska Since 1900, Mapped", "source": "usgs_comcat"}
+ ]
+}

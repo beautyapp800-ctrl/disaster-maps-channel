@@ -15,9 +15,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from . import core
-from .core import F_COL, Cam, font, world3
-from .renderer import H, W, Painter
-from .tornado import Data, Timeline, fmt
+from .core import Cam, font, world3
+from .renderer import H, W
+from .tornado import fmt
 
 YEL = (255, 214, 0)
 WHITE = (255, 255, 255)
@@ -79,18 +79,18 @@ def score(img, mask, boxes):
 
 
 def build(out: Path):
+    from .renderer import Renderer
+    from .tornado import EV_HIT
     out.mkdir(parents=True, exist_ok=True)
-    D = Data()
-    TL = Timeline(D)
-    P = Painter(D, TL)
-    sc = core.Scene(W, H)
+    r = Renderer()
+    D, TL, P, sc = r.D, r.TL, r.painter, r.scene
     ev = {e["key"]: e for e in D.events}
     k = H / 720.0
-    total, deaths = D.n, int(D.fat.sum())
+    total = D.n
     res = {}
 
-    # A: oblique 3D, all 73,458 tracks, three real strong tornadoes as 3D vortices (Joplin, Moore 2013, Hackleburg)
-    sc.set_texture(P.final_comp())
+    # A: oblique 3D satellite map with all 73,458 tracks + three real strong tornadoes as 3D vortices
+    sc.set_overlay(P.final_comp())
     vs = []
     for key in ("joplin", "moore13", "hackleburg"):
         i = ev[key]["idx"]
@@ -103,28 +103,23 @@ def build(out: Path):
     img.paste(lay, (0, 0), lay)
     res["A_all_tornadoes"] = (img, mask, boxes)
 
-    # B: close-up on the Moore 2013 EF5 with the F5 tracks; giant "60"
-    base = P.base.copy()
-    d = ImageDraw.Draw(base)
-    for i in TL.f5:
-        a, b = tuple(P.p0[i]), tuple(P.p1[i])
-        d.line([a, b], fill=(30, 0, 50), width=max(3, int(11 * core.TW / 4096)))
-        d.line([a, b], fill=F_COL[5], width=max(2, int(7 * core.TW / 4096)))
-    sc.set_texture(base)
-    i = ev["moore13"]["idx"]
-    p0, p1 = world3(D.slon[i], D.slat[i]), world3(D.elon[i], D.elat[i])
-    mid = (p0 + p1) / 2
-    vs = [(float(p1[0]), float(p1[1]), float(p1[2]), 0.28, 1.0)]
-    img = sc.render(Cam(float(mid[0]) - 0.1, 0.0, float(mid[2]) + 0.02, 1.0, 30, 28), tm=2.2, vortices=vs)
+    # B: the town close-up: Moore 2013 EF5 crossing real USGS imagery with 3D OSM buildings, debris and damage path
+    e = ev["moore13"]
+    t = e["t0"] + EV_HIT + 3.6
+    ph = TL.phase_at(t)
+    P.update(t, "main")
+    sc.set_overlay(P.texture(t, "main"))
+    cam = r.dir.cam(t)
+    img = sc.render(cam, tm=t, ovl_alpha=0.2, vortices=r._vortices(t, ph, cam), local=r.local_params(t, ph, cam))
     img = shade_left(img, 0.82, 0.55)
     lay, mask, boxes = text_layer([(str(len(TL.f5)), 330 * k, (36 * k, 400 * k), YEL), ("F5 TORNADOES", 100 * k, (44 * k, 500 * k), WHITE),
                                    ("THE STRONGEST SINCE 1950", 46 * k, (46 * k, 560 * k), WHITE)])
     img.paste(lay, (0, 0), lay)
     res["B_f5_closeup"] = (img, mask, boxes)
 
-    # C: heat map of all tornado paths, glowing, top-down
-    sc.set_texture(P.heat_texture(76.0))
-    img = sc.render(Cam(0.0, 0.0, 0.05, 3.9, 80, 0), tm=0.0, dim=1.0)
+    # C: heat map of all tornado paths over the satellite map
+    sc.set_overlay(P.heat_texture(76.0))
+    img = sc.render(Cam(0.0, 0.0, 0.05, 3.9, 80, 0), tm=0.0, clouds=0.4)
     img = shade_left(img, 0.7, 0.5)
     lay, mask, boxes = text_layer([("EVERY", 150 * k, (40 * k, 220 * k), WHITE), ("TORNADO", 170 * k, (40 * k, 372 * k), YEL),
                                    (fmt(total), 130 * k, (44 * k, 520 * k), WHITE), ("1950-2025", 64 * k, (46 * k, 600 * k), YEL)])

@@ -139,7 +139,7 @@ def world():
 
 # ---------------------------------------------------------------- local patches
 TOWNS = {  # town centre (lat, lon) used to frame the close-up; names verified on NWS pages (sources.json)
-    "waco": (31.549, -97.147), "flint": (43.090, -83.700), "udall": (37.390, -97.118), "jackson": (32.250, -90.210),
+    "waco": (31.549, -97.147), "flint": (43.090, -83.700), "ruskin": (38.940, -94.530), "jackson": (32.250, -90.210),
     "xenia": (39.685, -83.930), "moore99": (35.339, -97.487), "greensburg": (37.603, -99.293), "hackleburg": (34.277, -87.828),
     "joplin": (37.084, -94.513), "moore13": (35.339, -97.487), "mayfield": (36.742, -88.637),
 }
@@ -195,7 +195,10 @@ def buildings(D):
         if fn.exists():
             continue
         w = json.loads((out / f"{key}.json").read_text())
-        b = w["bbox"]
+        c = w["center"]
+        dlat = 4.5 / 110.57
+        dlon = 8.0 / (111.32 * math.cos(math.radians(c[0])))
+        b = [c[1] - dlon, c[0] - dlat, c[1] + dlon, c[0] + dlat]   # buildings only in the central 16 x 9 km
         q = f'[out:json][timeout:120];(way["building"]({b[1]:.5f},{b[0]:.5f},{b[3]:.5f},{b[2]:.5f}););out geom;'
         js = None
         for ep in OVERPASS * 2:
@@ -228,9 +231,9 @@ def buildings(D):
             t = el.get("tags", {})
             hgt = None
             try:
-                hgt = float(str(t.get("height", "")).split()[0])
-            except ValueError:
-                pass
+                hgt = float(str(t.get("height", "")).split()[0].replace("m", ""))
+            except Exception:  # noqa: BLE001
+                hgt = None
             if hgt is None:
                 try:
                     hgt = float(t.get("building:levels")) * 3.2
@@ -251,4 +254,7 @@ if __name__ == "__main__":
     if "local" in what:
         local(D)
     if "buildings" in what:
-        buildings(D)
+        try:
+            buildings(D)
+        except Exception as e:  # noqa: BLE001  (buildings are optional; the rest must still be committed)
+            print("buildings step failed:", e)

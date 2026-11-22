@@ -28,13 +28,39 @@ sh("ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str
 D = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)]).decode())
 print("video seconds", D)
 
-# ---- music: only the two CC0 tracks that passed Content ID, looped with crossfades, then two-pass loudnorm to -14 LUFS
-M = "assets/music/"
+# ---- audio: 4 cinematic CC0 tracks (crossfaded) under procedural sound effects, then two-pass loudnorm to -14 LUFS
+import urllib.request
+tracks = json.load(open("data/music/tracks.json", encoding="utf-8"))
+mdir = out_dir / "music"
+mdir.mkdir(exist_ok=True)
+files = []
+for t in tracks["tracks"]:
+    fn = mdir / (t["id"] + ".mp3")
+    try:
+        req = urllib.request.Request(t["url"], headers={"User-Agent": "disaster-maps-channel/1.0 (+https://github.com/beautyapp800-ctrl/disaster-maps-channel)"})
+        fn.write_bytes(urllib.request.urlopen(req, timeout=120).read())
+        files.append(str(fn))
+    except Exception as e:  # noqa: BLE001
+        print("music download failed", t["id"], e)
+if len(files) < 3:
+    print("falling back to the two repo tracks")
+    files = ["assets/music/oga-first-light-particles.mp3", "assets/music/oga-november-snow.mp3"] * 2
+sfx = out_dir / "sfx.wav"
+sh(sys.executable, "-m", "disasters.sound", str(sfx))
 mix = out_dir / "mix.wav"
-sh("ffmpeg", "-y", "-loglevel", "error", "-i", M + "oga-first-light-particles.mp3", "-i", M + "oga-november-snow.mp3",
-   "-i", M + "oga-first-light-particles.mp3", "-i", M + "oga-november-snow.mp3", "-filter_complex",
-   f"[0:a][1:a]acrossfade=d=5[a];[a][2:a]acrossfade=d=5[b];[b][3:a]acrossfade=d=5[c];[c]atrim=0:{D:.3f},afade=t=in:d=3,afade=t=out:st={D - 6:.3f}:d=6,aresample=48000[o]",
-   "-map", "[o]", "-ac", "2", str(mix))
+ins = []
+for f in files:
+    ins += ["-i", f]
+chain = "[0:a]"
+fc = []
+for k in range(1, len(files)):
+    fc.append(f"{chain}[{k}:a]acrossfade=d=6[x{k}]")
+    chain = f"[x{k}]"
+s_in = len(files)
+fc.append(f"{chain}atrim=0:{D:.3f},afade=t=in:d=3,afade=t=out:st={D - 6:.3f}:d=6,aresample=48000,loudnorm=I=-22:TP=-4:LRA=11[m]")
+fc.append(f"[{s_in}:a]aresample=48000,volume=0.85[s]")
+fc.append("[m][s]amix=inputs=2:normalize=0[o]")
+sh("ffmpeg", "-y", "-loglevel", "error", *ins, "-i", str(sfx), "-filter_complex", ";".join(fc), "-map", "[o]", "-ac", "2", str(mix))
 r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(mix), "-af", "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json", "-f", "null", "-"], capture_output=True, text=True)
 j = json.loads(re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr, re.S).group(0))
 print("pass1", j)

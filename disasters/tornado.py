@@ -16,9 +16,9 @@ from .core import ROOT
 
 FPS = 24
 YEAR_S = 4.5          # seconds of video per year
-EV_S = 14.0           # a zoom-in stop on a famous tornado
-EV_HIT = 3.0          # seconds after stop start when the vortex starts
-EV_RUN = 5.0          # vortex run duration
+EV_S = 16.0           # a zoom-in stop on a famous tornado (national -> regional -> town close-up -> back)
+EV_HIT = 4.5          # seconds after stop start when the vortex starts
+EV_RUN = 6.0          # vortex run duration
 INTRO_S, HEAT_S, BARS_S, FIN_S = 24.0, 24.0, 22.0, 26.0
 Y0, Y1 = 1950, 2025
 
@@ -35,7 +35,7 @@ STATE_NAMES = {"AL": "ALABAMA", "AZ": "ARIZONA", "AR": "ARKANSAS", "CA": "CALIFO
 EVENTS = [
     ("waco", "WACO, TEXAS", "1953-05-11", "TX", "16:10", None),
     ("flint", "FLINT, MICHIGAN", "1953-06-08", "MI", "19:30", None),
-    ("udall", "UDALL, KANSAS", "1955-05-25", "OK", "22:00", None),
+    ("ruskin", "RUSKIN HEIGHTS, MISSOURI", "1957-05-20", "KS", "18:15", None),
     ("jackson", "JACKSON, MISSISSIPPI", "1966-03-03", "MS", "18:30", None),
     ("xenia", "XENIA, OHIO", "1974-04-03", "OH", "13:30", ("1974-04-03", "1974-04-04", "SUPER OUTBREAK: {n} TORNADOES IN 2 DAYS")),
     ("moore99", "BRIDGE CREEK-MOORE, OKLAHOMA", "1999-05-03", "OK", "17:26", None),
