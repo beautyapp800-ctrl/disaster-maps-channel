@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       slug: ${{ steps.p.outputs.slug }}
+      engine: ${{ steps.p.outputs.engine }}
     steps:
       - uses: actions/checkout@v4
       - id: p
@@ -37,12 +38,15 @@ jobs:
           except Exception:
               done = set()
           want = 2 + 2   # 2 regular + up to 2 emergency
-          slug = ""
+          slug, engine = "", "tornado"
+          busy = subprocess.run(["gh", "run", "list", "--workflow", "pilot.yml", "--status", "in_progress", "--json", "databaseId"], capture_output=True, text=True).stdout
+          if json.loads(busy or "[]"):
+              print("a pilot render is running: skip"); want = 0
           if len(have) < want or os.environ.get("FORCE") == "true":
               for t in q:
                   if t["engine"].startswith("engine_pending") or t["slug"] in have or t["slug"] in done:
                       continue
-                  slug = t["slug"]; break
+                  slug = t["slug"]; engine = "hurricane" if t["engine"] == "hurricane" else "tornado"; break
           print("reserve:", sorted(have), "next:", slug or "(nothing buildable)")
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"slug={slug}\n")
           PY
@@ -51,9 +55,10 @@ jobs:
     if: needs.plan.outputs.slug != ''
     uses: ./.github/workflows/pilot.yml
     with:
+      engine: ${{ needs.plan.outputs.engine }}
       res: "2160"
       texw: "4096"
-      segments: "24"
+      segments: "32"
       crf: "20"
   store:
     needs: [plan, build]

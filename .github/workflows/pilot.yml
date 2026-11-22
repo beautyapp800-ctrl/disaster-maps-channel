@@ -1,10 +1,13 @@
 name: pilot
+run-name: pilot ${{ inputs.engine || 'tornado' }} ${{ inputs.res || '2160' }}
 # Manual only (automation stays OFF until the owner says ok). Renders "Every Tornado in US History Mapped".
 # Parallel segments on the runner (OpenGL on the CPU), then assemble + QA. max-parallel 6 keeps the account's 20-job limit free.
 on:
   workflow_call:
     inputs:
       engine: {type: string, default: "tornado"}
+      slug: {type: string, default: ""}
+      store: {type: string, default: "false"}
       res: {type: string, default: "2160"}
       texw: {type: string, default: "4096"}
       segments: {type: string, default: "24"}
@@ -14,6 +17,12 @@ on:
       engine:
         description: "tornado or hurricane"
         default: "tornado"
+      slug:
+        description: "topic slug (needed when store=true)"
+        default: ""
+      store:
+        description: "true = create the draft release reserve-<slug> when done (no upload to YouTube)"
+        default: "false"
       res:
         description: "video height (2160 = 4K, 1080, 360 = smoke test)"
         default: "2160"
@@ -125,3 +134,27 @@ jobs:
           path: out/final/final.mp4
           retention-days: 14
           compression-level: 0
+  store:
+    if: inputs.store == 'true' && inputs.slug != ''
+    needs: [covers, assemble]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp shapely
+      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/hurdat2.txt https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt
+      - uses: actions/download-artifact@v4
+        with: {name: final-video, path: dl/video}
+      - uses: actions/download-artifact@v4
+        with: {name: covers, path: dl/covers}
+      - uses: actions/download-artifact@v4
+        with: {name: review, path: dl/review}
+      - name: "Metadata check and draft release reserve-slug (no YouTube upload)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ inputs.slug }}
+          RES: ${{ inputs.res }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash scripts/store_release.sh

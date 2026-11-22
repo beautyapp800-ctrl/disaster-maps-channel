@@ -1,0 +1,25 @@
+name: chain
+# Owner approved 23.11: render the tornado film and then the hurricane film automatically once the data is ready (the PC can be off).
+# Triggered when a data job or a render finishes. Draft releases only, no YouTube upload.
+on:
+  workflow_run:
+    workflows: [prep-mini, pilot]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: chain
+  cancel-in-progress: false
+jobs:
+  next:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - name: Decide and launch the next render
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/chain.sh

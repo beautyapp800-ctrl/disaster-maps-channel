@@ -871,7 +871,7 @@ def main():
     print(f"segment {a.seg}/{a.of}: frames {n0}-{n1} of {total} ({r.TL.total:.1f}s) {W}x{H} tex {TW} GL {r.scene.renderer}", flush=True)
     mp4 = out / f"seg_{a.seg:02d}.mp4"
     enc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
-                            "-c:v", "libx264", "-preset", "medium", "-crf", a.crf, "-maxrate", "22M" if H >= 2160 else "10M", "-bufsize", "44M" if H >= 2160 else "20M",
+                            "-c:v", "libx264", "-preset", "medium", "-crf", a.crf, "-maxrate", "19M" if H >= 2160 else "10M", "-bufsize", "38M" if H >= 2160 else "20M",
                             "-g", "48", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(mp4)], stdin=subprocess.PIPE)
     qa = open(out / f"qa_{a.seg:02d}.jsonl", "w")
     t0 = time.time()
