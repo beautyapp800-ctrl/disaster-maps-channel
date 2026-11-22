@@ -19,7 +19,7 @@ import shapefile
 from PIL import Image, ImageDraw, ImageFilter
 
 from . import core
-from .core import F_COL, F_W, FR, TH, TW, Cam, font, lerp_cam, smooth, world3
+from .core import F_COL, F_W, FR, ROOT, TH, TW, Cam, font, lerp_cam, smooth, world3
 from .tornado import (BARS_S, EV_HIT, EV_RUN, EV_S, FIN_S, FPS, HEAT_S, INTRO_S, MONTHS, STATE_NAMES, Y0, Y1, Data, Timeline, fmt)
 
 RES = int(os.environ.get("RES", "2160"))
@@ -280,11 +280,13 @@ class Painter:
 
 # ---------------------------------------------------------------- camera director (soft shake only on F5 close-ups)
 class Director:
-    REG_DIST, LOC_DIST = 1.0, 0.014
+    REG_DIST = 1.0
+    RUN_KM = 2.6          # close-up shows the vortex from RUN_KM before the town to RUN_KM after it
 
     def __init__(self, D: Data, TL: Timeline):
-        from . import world
+        from . import mini
         self.D, self.TL = D, TL
+        self.U = mini.M_PER_UNIT
         self.keys = self._keys()
         self.kt = [k[0] for k in self.keys]
         self.cent = state_centroids()
@@ -297,20 +299,22 @@ class Director:
             hx, hz = (p1[0] - p0[0]), (p1[2] - p0[2])
             nrm = max(1e-9, math.hypot(hx, hz))
             yaw = math.degrees(math.atan2(-hx / nrm, -hz / nrm))
-            info = dict(p0=p0, p1=p1, mid=(p0 + p1) / 2, ext=ext, yaw=yaw, f0=0.0, f1=1.0, local=None)
-            try:
-                L = world.Local(e["key"])
-                fr = L.clip_fracs(D.slon[i], D.slat[i], D.elon[i], D.elat[i])
-                if fr:
-                    info["f0"], info["f1"] = fr
-                    info["local"] = L
-            except FileNotFoundError:
-                pass
-            if info["local"] is None:
-                info["f0"], info["f1"] = 0.0, 1.0
+            pa = np.array(FR.world(D.slon[i], D.slat[i]), float)
+            pb = np.array(FR.world(D.elon[i], D.elat[i]), float)
+            L = float(np.linalg.norm(pb - pa))
+            dv = (pb - pa) / max(L, 1e-12)
+            info = dict(p0=p0, p1=p1, mid=(p0 + p1) / 2, ext=ext, yaw=yaw, pa=pa, pb=pb, L=L, dir=dv, town=None)
+            osm = ROOT / "data" / "osm" / f"{e['key']}.json.gz"
+            if osm.exists():
+                import gzip
+                c = json.load(gzip.open(osm, "rt", encoding="utf-8"))["center"]
+                O = np.array(FR.world(c[1], c[0]), float)
+                s_c = float(np.dot(O - pa, dv))
+                run = self.RUN_KM / core.KM_PER_UNIT
+                info.update(town=e["key"], s_c=s_c, s0=max(0.0, s_c - run), s1=min(L, s_c + run))
             self.ev[e["key"]] = info
         # soft shake: only when the strongest (F5/EF5) famous tornado touches down in the close-up
-        self.hits = sorted((e["t0"] + EV_HIT, 0.0035) for e in D.events if D.mag[e["idx"]] == 5)
+        self.hits = sorted((e["t0"] + EV_HIT, 0.0030) for e in D.events if D.mag[e["idx"]] == 5 and self.ev[e["key"]]["town"])
         self.hit_t = [h[0] for h in self.hits]
 
     def _keys(self):
@@ -339,47 +343,109 @@ class Director:
         p = self.TL.phase_at(t)
         return p if p["kind"] == "event" else None
 
-    def vortex_frac(self, key, t, t0):
-        """position along the full SPC path (0..1): the run covers the part inside the close-up window."""
+    def run_u(self, t, t0):
+        """0..1 progress of the close-up run"""
+        return min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
+
+    def along(self, key, t, t0):
+        """distance of the vortex from the SPC path start (world units) during the close-up"""
         info = self.ev[key]
-        u = min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
-        return info["f0"] + (info["f1"] - info["f0"]) * u
+        u = self.run_u(t, t0)
+        return info["s0"] + (info["s1"] - info["s0"]) * u
+
+    def vortex_frac(self, key, t, t0):
+        info = self.ev[key]
+        if info["town"]:
+            return self.along(key, t, t0) / max(info["L"], 1e-12)
+        return min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
+
+    def ground(self, key, s):
+        from . import mini
+        info = self.ev[key]
+        p = info["pa"] + info["dir"] * s
+        lon, lat = mini._inv_world(p[0], p[1])
+        return np.array([p[0], float(core.height_at(lon, lat)), p[1]])
 
     def pos(self, key, f):
-        info = self.ev[key]
         e = [e for e in self.D.events if e["key"] == key][0]
         i = e["idx"]
         D = self.D
         return world3(D.slon[i] + (D.elon[i] - D.slon[i]) * f, D.slat[i] + (D.elat[i] - D.slat[i]) * f)
+
+    def city_s(self, key):
+        """path position of the densest built-up block inside the close-up run (the neighbourhood the vortex will hit)"""
+        info = self.ev[key]
+        if "city_s" in info:
+            return info["city_s"]
+        import gzip
+        osm = json.load(gzip.open(ROOT / "data" / "osm" / f"{key}.json.gz", "rt", encoding="utf-8"))
+        c = np.array([np.asarray(b["g"]).reshape(-1, 2).mean(0) for b in osm["buildings"]]) if osm["buildings"] else np.zeros((0, 2))
+        best = info["s_c"]
+        if len(c):
+            x, z = FR.world(c[:, 0], c[:, 1])
+            rel = np.stack([x, z], 1) - info["pa"]
+            s = rel @ info["dir"]
+            d = np.abs(rel @ np.array([-info["dir"][1], info["dir"][0]]))
+            ok = (d < 900 / self.U) & (s > info["s0"] + 700 / self.U) & (s < info["s1"])
+            if ok.sum() > 50:
+                hist, edges = np.histogram(s[ok], bins=24)
+                k = int(np.argmax(np.convolve(hist, np.ones(3), "same")))
+                best = float((edges[k] + edges[k + 1]) / 2)
+        info["city_s"] = best
+        return best
+
+    def close_cam(self, key, t, t0):
+        """low side view under the storm, rising at the end of the run to show the damage path"""
+        info = self.ev[key]
+        U = self.U
+        u = self.run_u(t, t0)
+        g = self.ground(key, self.along(key, t, t0))
+        rise = smooth((u - 0.62) / 0.38)
+        h = (240 + 160 * rise) / U * core.EXAG      # target height above ground (scene flattens relief by 1/EXAG up close)
+        dist = (2100 + 1500 * rise) / U
+        pitch = 3.0 + 31.0 * rise
+        yaw = info["yaw"] + 70.0 + 18.0 * u
+        back = info["dir"] * (-300 / U) * rise
+        return Cam(g[0] + back[0], g[1] + h, g[2] + back[1], dist, pitch, yaw)
 
     def event_cam(self, t, p):
         e = p["ev"]
         info = self.ev[e["key"]]
         tl = t - p["t0"]
         yaw = info["yaw"] + 25.0
-        has_local = info["local"] is not None
-        town = self.pos(e["key"], (info["f0"] + info["f1"]) / 2)
-        reg = Cam(town[0], town[1], town[2], self.REG_DIST, 50.0, yaw)
-        ld = self.LOC_DIST if has_local else 0.9
-
-        def loc(tt):
-            f = self.vortex_frac(e["key"], p["t0"] + tt, p["t0"])
-            v = self.pos(e["key"], f)
-            c = town + (v - town) * 0.65
-            return Cam(c[0], c[1], c[2], ld, 33.0 if has_local else 34.0, yaw)
-
         mid = info["mid"]
         reg2 = Cam(mid[0], mid[1], mid[2], max(1.0, info["ext"] * 2.6 + 0.5), 46.0, yaw)
         orbit = self.base_cam(t)
-        if tl < 2.5:
-            return lerp_cam(orbit, reg, smooth(tl / 2.5))
+        if not info["town"]:
+            reg = Cam(mid[0], mid[1], mid[2], self.REG_DIST, 50.0, yaw)
+            if tl < 2.5:
+                return lerp_cam(orbit, reg, smooth(tl / 2.5))
+            if tl < EV_S - 3.5:
+                return lerp_cam(reg, reg2, smooth((tl - 2.5) / (EV_S - 6.0)))
+            return lerp_cam(reg2, orbit, smooth((tl - EV_S + 3.5) / 3.5))
+        town = self.ground(e["key"], info["s_c"])
+        reg = Cam(town[0], town[1], town[2], self.REG_DIST, 50.0, info["yaw"] + 70.0)
+        c0 = self.close_cam(e["key"], p["t0"] + EV_HIT, p["t0"])
+        c1 = self.close_cam(e["key"], p["t0"] + EV_HIT + EV_RUN, p["t0"])
+        U = self.U
+        O = self.ground(e["key"], self.city_s(e["key"]))
+        side = np.array([-info["dir"][1], info["dir"][0]]) * (120 / U)
+
+        def city(k):
+            return Cam(O[0] + side[0], O[1] + 30 / U * core.EXAG, O[2] + side[1], (880 - 90 * k) / U, 38.0 - 3 * k, info["yaw"] + 70.0 - 25.0 + 10.0 * k)
+        if tl < 2.0:
+            return lerp_cam(orbit, reg, smooth(tl / 2.0))
+        if tl < 4.5:
+            return lerp_cam(reg, city(0.0), smooth((tl - 2.0) / 2.5))
+        if tl < 6.0:
+            return city((tl - 4.5) / 1.5)
         if tl < EV_HIT:
-            return lerp_cam(reg, loc(EV_HIT), smooth((tl - 2.5) / (EV_HIT - 2.5)))
+            return lerp_cam(city(1.0), c0, smooth((tl - 6.0) / (EV_HIT - 6.0)))
         if tl < EV_HIT + EV_RUN:
-            return loc(tl)
-        if tl < EV_HIT + EV_RUN + 2.0:
-            return lerp_cam(loc(EV_HIT + EV_RUN), reg2, smooth((tl - EV_HIT - EV_RUN) / 2.0))
-        return lerp_cam(reg2, orbit, smooth((tl - EV_HIT - EV_RUN - 2.0) / (EV_S - EV_HIT - EV_RUN - 2.0)))
+            return self.close_cam(e["key"], t, p["t0"])
+        if tl < EV_HIT + EV_RUN + 2.5:
+            return lerp_cam(c1, reg2, smooth((tl - EV_HIT - EV_RUN) / 2.5))
+        return lerp_cam(reg2, orbit, smooth((tl - EV_HIT - EV_RUN - 2.5) / (EV_S - EV_HIT - EV_RUN - 2.5)))
 
     def cam(self, t):
         p = self.event_phase(t)
@@ -487,7 +553,7 @@ class Hud:
         ImageDraw.Draw(im).text((30 * K, hgt / 2 + 18 * K), text, font=font(size), fill=WHITE, anchor="ls")
         self.put(frame, im, (36 * K, H - 36 * K - hgt), "CAP", alpha)
 
-    def card(self, frame, lines, alpha, ident="CARD"):
+    def card(self, frame, lines, alpha, ident="CARD", left=False):
         """lines: [(text, size, colour)]"""
         d0 = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
         maxw = W - 72 * K - 40 * K
@@ -503,7 +569,7 @@ class Hud:
         for text, s, col, _ in fitted:
             d.text((40 * K, y + s), text, font=font(s), fill=col, anchor="ls")
             y += s * 1.22
-        self.put(frame, im, ((W - w) / 2, H - 36 * K - hgt), ident, alpha)
+        self.put(frame, im, (36 * K if left else (W - w) / 2, H - 36 * K - hgt), ident, alpha)
 
 
 def event_card_lines(D: Data, e):
@@ -522,13 +588,13 @@ def event_card_lines(D: Data, e):
 # ---------------------------------------------------------------- frame renderer
 class Renderer:
     def __init__(self, scene=None):
-        from .world import LivingScene, M_PER_UNIT
+        from .mini import MiniScene, M_PER_UNIT
         self.M_PER_UNIT = M_PER_UNIT
         self.D = Data()
         self.TL = Timeline(self.D)
         self.painter = Painter(self.D, self.TL)
         self.dir = Director(self.D, self.TL)
-        self.scene = scene or LivingScene(W, H)
+        self.scene = scene or MiniScene(W, H)
         D = self.D
         cent = self.dir.cent
         counts = {s: int((D.st == s).sum()) for s in cent}
@@ -546,31 +612,29 @@ class Renderer:
         return tuple(int(np.interp(v, stops, [c[j] for c in cols])) for j in range(3))
 
     def local_params(self, t, ph, cam):
-        """Close-up resources for an event: damage swath on the NAIP patch + flattened OSM buildings behind the vortex."""
+        """Town close-up: OSM town, damage swath + collapsing buildings behind the vortex, volumetric funnel, debris, mother cloud."""
         if ph["kind"] != "event":
             return None
         e = ph["ev"]
         info = self.dir.ev[e["key"]]
-        L = info["local"]
-        if L is None:
+        if not info["town"]:
             return None
-        a = float(np.clip((0.45 - cam.dist) / 0.3, 0.0, 1.0))
-        if a <= 0.01:
-            return None
-        D = self.D
+        D, U = self.D, self.M_PER_UNIT
         i = e["idx"]
-        f = self.dir.vortex_frac(e["key"], t, ph["t0"])
-        au, av = L.uv(D.slon[i], D.slat[i])
-        bu, bv = L.uv(D.elon[i], D.elat[i])
-        asp = (L.lon1 - L.lon0) * math.cos(math.radians((L.lat0 + L.lat1) / 2)) / (L.lat1 - L.lat0)
-        Lp = math.hypot((bu - au) * asp, bv - av)
-        win_h_m = (L.lat1 - L.lat0) * 110570.0
-        half_m = max(60.0, D.wd[i] * 0.9144 / 2)
-        pa = FR.world(D.slon[i], D.slat[i])
-        pb = FR.world(D.elon[i], D.elat[i])
-        Lw = math.hypot(pb[0] - pa[0], pb[1] - pa[1])
-        return dict(key=e["key"], alpha=a, swath=((au, av), (bu, bv), half_m / win_h_m, Lp * f),
-                    bpath=((float(pa[0]), float(pa[1])), (float(pb[0]), float(pb[1])), half_m / self.M_PER_UNIT, Lw * f), bscale=4.0)
+        tl = t - ph["t0"]
+        along = self.dir.along(e["key"], t, ph["t0"])
+        hw_m = max(70.0, D.wd[i] * 0.9144 / 2 * 0.62)          # typical damage half-width (SPC width is the maximum)
+        u = self.dir.run_u(t, ph["t0"])
+        ca = smooth((tl - (EV_HIT - 2.2)) / 1.5) * (1.0 - smooth((u - 0.58) / 0.28))
+        fa = smooth((tl - (EV_HIT - 1.6)) / 1.0) * (1.0 - smooth((u - 0.62) / 0.22))
+        g = self.dir.ground(e["key"], along)
+        loc = dict(key=e["key"], pa=tuple(info["pa"]), pb=tuple(info["pb"]), hw=hw_m / U, along=along, clen=hw_m * 0.8 / U,
+                   storm=(g[0], g[2], 2800 / U, 0.55 * ca))
+        if fa > 0.01 and cam.dist < 0.03:
+            loc["funnel"] = dict(pos=tuple(g), H=680 / U, r0=min(240.0, max(80.0, hw_m * 0.42)) / U, alpha=fa, dark=0.85, dusty=1.0)
+            loc["debris"] = fa
+            loc["cloud"] = dict(r=2600 / U, base=660 / U, thick=600 / U, alpha=ca)
+        return loc
 
     def frame(self, n):
         D, TL, P = self.D, self.TL, self.painter
@@ -584,29 +648,77 @@ class Renderer:
         kz = min(1.0, max(0.0, (3.2 - cam.dist) / 1.6))
         ovl_alpha = (1.0 - 0.75 * kz) * min(1.0, max(0.0, (cam.dist - 0.25) / 0.75)) if mode == "main" else 1.0
         vort, bars = [], []
+        loc = self.local_params(t, ph, cam) if mode == "main" else None
         if mode == "main":
-            vort = self._vortices(t, ph, cam)
+            vort = self._vortices(t, ph, cam, skip_famous=bool(loc is not None and cam.dist < 0.5))
         elif mode == "bars":
             g = smooth((t - ph["t0"] - 3.0) / 9.0)
             for s, x, y, z, v in self.bars:
                 bars.append((x, y, z, 0.085, max(0.004, v * 0.62 * g), self.bar_color(v)))
-        loc = self.local_params(t, ph, cam) if mode == "main" else None
-        img = self.scene.render(cam, tm=t, dim=0.92 if mode in ("heat", "bars") else 1.0, ovl_alpha=ovl_alpha, vortices=vort, bars=bars,
-                                local=loc, lights=0.22, clouds=0.5 if mode in ("heat", "bars") else 1.0)
+        img = self.scene.render(cam, tm=t, dim=0.92 if mode in ("heat", "bars") else 1.0, ovl_alpha=ovl_alpha, vortices=vort, bars=bars, local=loc)
+        vcam = self.scene.view_cam(cam)
         if ph["kind"] == "event":
-            self.event_overlay(img, t, ph, cam)
+            self.event_overlay(img, t, ph, vcam)
+        labs = []
+        if loc is not None and cam.dist < 0.03:
+            fx = None
+            if loc.get("funnel"):
+                fp = np.array([loc["funnel"]["pos"]])
+                fp[:, 1] *= self.scene.yscale(cam)
+                fx = float(vcam.project(fp, W, H)[0][0, 0])
+            labs = self.labels(img, vcam, min(1.0, (0.03 - cam.dist) / 0.01), fx)
         meta = self.hud(img, t, ph, cam)
-        meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"])
+        meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"], labels=labs)
         return img, meta
+
+    def labels(self, img, vcam, alpha, avoid_x=None):
+        """names of neighbourhoods, parks, lakes and landmarks from OpenStreetMap, projected onto the town (no overlaps)"""
+        R = self.scene.town
+        if R is None or alpha <= 0.02:
+            return []
+        T = R["T"]
+        ys = self.scene.yscale(vcam)
+        cand = []
+        for lb in T.labels:
+            y = float(core.height_at(lb["lon"], lb["lat"])) * ys
+            cand.append((lb, (lb["x"] + T.O[0], y, lb["z"] + T.O[2])))
+        if not cand:
+            return []
+        px, ok = vcam.project(np.array([c[1] for c in cand]), W, H)
+        d = ImageDraw.Draw(img, "RGBA")
+        placed, out = [], []
+        sz = int(34 * K)
+        fnt = font(sz)
+        for (lb, _), (x, y), good in sorted(zip(cand, px, ok), key=lambda a: a[0][0]["pri"]):
+            if not good or not (0.08 * W < x < 0.92 * W and 0.42 * H < y < 0.70 * H):
+                continue
+            if avoid_x is not None and abs(x - avoid_x) < 0.16 * W:
+                continue
+            tw = d.textlength(lb["name"], font=fnt)
+            box = (x - tw / 2 - 12 * K, y - 66 * K - sz, x + tw / 2 + 12 * K, y + 8 * K)
+            if any(not (box[2] < b[0] or box[0] > b[2] or box[3] < b[1] or box[1] > b[3]) for b in placed):
+                continue
+            placed.append(box)
+            a = int(255 * alpha)
+            d.line([(x, y - 56 * K), (x, y - 6 * K)], fill=(255, 255, 255, int(a * 0.85)), width=max(1, int(2 * K)))
+            d.ellipse((x - 5 * K, y - 5 * K, x + 5 * K, y + 5 * K), fill=(255, 255, 255, a))
+            for ox, oy in ((2, 2), (1, 2), (2, 1)):
+                d.text((x + ox * K, y - 62 * K + oy * K), lb["name"], font=fnt, fill=(0, 0, 0, int(a * 0.55)), anchor="ms")
+            d.text((x, y - 62 * K), lb["name"], font=fnt, fill=(255, 255, 255, a), anchor="ms")
+            out.append(lb["name"])
+            if len(out) >= 5:
+                break
+        return out
 
     def event_overlay(self, img, t, ph, cam):
         """After the close-up: the whole real path as a crisp line in the regional view."""
-        if t - ph["t0"] < EV_HIT + EV_RUN or cam.dist < 0.15:
+        if t - ph["t0"] < EV_HIT + EV_RUN + 0.8 or cam.dist < 0.15:
             return
         D = self.D
         i = ph["ev"]["idx"]
         ss = np.linspace(0, 1, 32)
         pts = world3(D.slon[i] + (D.elon[i] - D.slon[i]) * ss, D.slat[i] + (D.elat[i] - D.slat[i]) * ss, lift=0.004)
+        pts[:, 1] *= self.scene.yscale(cam)
         px, ok = cam.project(pts, W, H)
         if not ok.all():
             return
@@ -616,10 +728,10 @@ class Renderer:
         d.line(line, fill=WHITE, width=max(2, int(15 * K * sc)), joint="curve")
         d.line(line, fill=F_COL[int(D.mag[i])], width=max(1, int(9 * K * sc)), joint="curve")
 
-    def _vortices(self, t, ph, cam):
+    def _vortices(self, t, ph, cam, skip_famous=False):
         D, TL = self.D, self.TL
         out = []
-        a = bisect_left(TL.ta, t - 6.5)
+        a = bisect_left(TL.ta, t - 9.5)
         b = bisect_right(TL.ta, t)
         evs = {e["idx"]: e for e in D.events}
         cand = []
@@ -628,7 +740,7 @@ class Renderer:
             if an <= 0:
                 continue
             tt = t - TL.ta[i]
-            if tt > an + 0.5:
+            if tt > an + 0.5 or (i in evs and skip_famous):
                 continue
             cand.append((0 if i in evs else 1, tt, i))
         cand.sort()
@@ -637,7 +749,7 @@ class Renderer:
             al = smooth(tt / 0.3) * (1 - smooth((tt - an) / 0.5))
             if i in evs:
                 f = self.dir.vortex_frac(evs[i]["key"], t, ph["t0"]) if ph["kind"] == "event" else 1.0
-                size = 0.16 * cam.dist
+                size = 0.10 * cam.dist
             else:
                 f = min(1.0, tt / an)
                 size = 0.032 * cam.dist
@@ -676,9 +788,9 @@ class Renderer:
             meta.update(count=k, deaths=deaths, cls={str(c): v for c, v in cls.items()}, dt=dt)
             if kind == "event":
                 tl = t - ph["t0"]
-                if 5.0 < tl < EV_S - 2.5:
-                    a = min(1.0, (tl - 5.0) / 0.5, (EV_S - 2.5 - tl) / 0.5)
-                    H_.card(img, event_card_lines(D, ph["ev"]), a)
+                if 4.5 < tl < EV_S - 2.5:
+                    a = min(1.0, (tl - 4.5) / 0.5, (EV_S - 2.5 - tl) / 0.5)
+                    H_.card(img, event_card_lines(D, ph["ev"]), a, left=bool(self.dir.ev[ph["ev"]["key"]]["town"]))
             else:
                 cap, al = TL.caption_at(t)
                 if cap:
@@ -712,7 +824,7 @@ class Renderer:
             if a > 0:
                 H_.card(img, [("EVERY TORNADO IN U.S. HISTORY, MAPPED", 70, YEL),
                               ("DATA: NOAA / NWS STORM PREDICTION CENTER, 1950-2025 (2025 PRELIMINARY)", 36, WHITE),
-                              ("IMAGERY: NASA BLUE MARBLE, BLACK MARBLE · USGS NAIP · BUILDINGS: (C) OPENSTREETMAP CONTRIBUTORS", 30, (200, 215, 240))], a, "END")
+                              ("MAP: USGS NLCD, 3DEP · NASA BLUE MARBLE · TOWNS: (C) OPENSTREETMAP CONTRIBUTORS, TODAY'S STREETS IN ILLUSTRATIVE 3D", 28, (200, 215, 240))], a, "END")
         meta["panels"] = H_.items
         return meta
 

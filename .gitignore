@@ -9,3 +9,7 @@ client_secret*.json
 youtube_token.json
 out/
 bench/out/
+data/osm/
+data/region/
+data/world/nlcd_8192.png
+data/world/hs_8192.jpg

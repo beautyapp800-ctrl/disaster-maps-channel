@@ -42,7 +42,7 @@ DEP = "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/Imag
 NLCD_RGB = {11: (70, 107, 159), 12: (209, 222, 248), 21: (222, 197, 197), 22: (217, 146, 130), 23: (235, 0, 0), 24: (171, 0, 0),
             31: (179, 172, 159), 41: (104, 171, 95), 42: (28, 95, 44), 43: (181, 197, 143), 52: (204, 184, 121), 71: (223, 223, 194),
             81: (220, 217, 57), 82: (171, 108, 40), 90: (184, 217, 235), 95: (108, 159, 184)}
-LEVELS = {"reg": (300.0, 4096), "mid": (64.0, 4096)}     # window size km, texture size
+LEVELS = {"reg": (300.0, 4096, 0.0026), "mid": (64.0, 4096, 0.0003)}     # window size km, texture size, source degrees per pixel
 
 
 def nlcd_classes(rgb):
@@ -125,11 +125,29 @@ def nation():
     box = (-125.5, 23.5, -66.0, 50.0)
     from prep_world import tex_lonlat
     lon, lat = tex_lonlat(8192, 4608)
-    cls, geo = wms_mosaic(*box, 0.0045)
+    cls, geo = wms_mosaic(*box, 0.009)
     Image.fromarray(sample(cls, geo, lon, lat, True)).save(out / "nlcd_8192.png", optimize=True)
     del cls
-    hs, geo = dep_mosaic(*box, 0.0045)
+    hs, geo = dep_mosaic(*box, 0.009)
     Image.fromarray(sample(hs, geo, lon, lat, False)).save(out / "hs_8192.jpg", quality=88)
+
+
+OUTER = (-0.3, 1.3)    # outer texture covers u, v in this range of the national texture frame
+
+
+def outer():
+    """NASA Blue Marble around the map frame, so the national view has land and ocean up to the horizon"""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from prep_world import gibs_mosaic, resample
+    out = ROOT / "data" / "world"
+    eq, geo = gibs_mosaic("BlueMarble_NextGeneration", -160.0, 0.0, -30.0, 75.0, 0.03)
+    n_w, n_h = 4096, 2304
+    fr = core.FR
+    uu = OUTER[0] + (np.arange(n_w) + 0.5) / n_w * (OUTER[1] - OUTER[0])
+    vv = OUTER[0] + (np.arange(n_h) + 0.5) / n_h * (OUTER[1] - OUTER[0])
+    U, V = np.meshgrid(uu * core.TW, vv * core.TH)
+    lon, lat = albers_inv((U - core.TW / 2) / fr.s + fr.cx, fr.cy - (V - core.TH / 2) / fr.s)
+    Image.fromarray(resample(eq, geo, lon, lat)).save(out / "outer_4096.jpg", quality=88)
 
 
 def region(keys):
@@ -139,13 +157,14 @@ def region(keys):
         w = json.loads((ROOT / "data" / "local" / f"{key}.json").read_text())
         clat, clon = w["center"]
         cx, cz = (float(v) for v in core.FR.world(clon, clat))
+        if (out / f"{key}.json").exists():
+            continue
         meta = dict(key=key, center=[clat, clon], cx=cx, cz=cz, levels={})
-        for lvl, (km, n) in LEVELS.items():
+        for lvl, (km, n, deg) in LEVELS.items():
             size_w = km / core.KM_PER_UNIT
             lon, lat = world_grid_lonlat(cx, cz, size_w, n)
             pad = 0.02
             b = (lon.min() - pad, lat.min() - pad, lon.max() + pad, lat.max() + pad)
-            deg = max(0.00027, (km * 1000 / n) / 111320.0)
             cls, geo = wms_mosaic(*b, deg)
             Image.fromarray(sample(cls, geo, lon, lat, True)).save(out / f"{key}_{lvl}.png", optimize=True)
             hs, geo = dep_mosaic(*b, deg)
@@ -262,7 +281,7 @@ def osm(keys):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    what = {a for a in args if a in ("nation", "region", "osm")} or {"nation", "region", "osm"}
+    what = {a for a in args if a in ("nation", "region", "osm", "outer")} or {"nation", "region", "osm"}
     keys = [a for a in args if a in TOWNS] or list(TOWNS)
     if "osm" in what:
         try:
@@ -273,3 +292,5 @@ if __name__ == "__main__":
         region(keys)
     if "nation" in what:
         nation()
+    if "outer" in what:
+        outer()

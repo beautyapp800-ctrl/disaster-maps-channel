@@ -16,9 +16,9 @@ from .core import ROOT
 
 FPS = 24
 YEAR_S = 4.5          # seconds of video per year
-EV_S = 16.0           # a zoom-in stop on a famous tornado (national -> regional -> town close-up -> back)
-EV_HIT = 4.5          # seconds after stop start when the vortex starts
-EV_RUN = 6.0          # vortex run duration
+EV_S = 22.0           # a zoom-in stop on a famous tornado (national -> regional -> town from above -> storm close-up -> back)
+EV_HIT = 7.0          # seconds after stop start when the close-up run starts
+EV_RUN = 8.0          # close-up: the vortex crosses the town
 INTRO_S, HEAT_S, BARS_S, FIN_S = 24.0, 24.0, 22.0, 26.0
 Y0, Y1 = 1950, 2025
 
