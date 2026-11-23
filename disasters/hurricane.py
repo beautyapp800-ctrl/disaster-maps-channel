@@ -16,10 +16,11 @@ from .core import ROOT
 
 FPS = 24
 Y0, Y1 = 1851, 2025
-YEAR_S = 2.0            # seconds of video per year
+YEAR_S = 1.7            # seconds of video per year
 EV_S = 22.0             # famous landfall stop (national -> regional -> town -> storm close-up -> back)
 EV_HIT = 7.0
 EV_RUN = 8.0
+SH_S, SH_HIT, SH_RUN = 10.0, 2.4, 5.4     # short zoom to another major landfall (owner 23.11: every 30-40 s)
 INTRO_S, HEAT_S, BARS_S, FIN_S = 22.0, 22.0, 22.0, 24.0
 CAT_COL = {1: (255, 214, 0), 2: (255, 150, 0), 3: (255, 70, 20), 4: (220, 0, 70), 5: (150, 0, 200), 0: (90, 190, 255)}
 CAT_W = {0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7}
@@ -28,9 +29,9 @@ MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUS
 # famous US landfalls: (key, storm name in HURDAT2, year, card title, landfall town for the close-up (lat, lon))
 # place names to be checked on NHC / NWS pages and recorded in sources.json (event_names_hurricane)
 EVENTS = [
-    ("galveston1900", "UNNAMED", 1900, "GALVESTON, TEXAS", (29.30, -94.80)),
-    ("laborday1935", "UNNAMED", 1935, "FLORIDA KEYS", (24.92, -80.63)),
-    ("newengland1938", "UNNAMED", 1938, "LONG ISLAND & NEW ENGLAND", (40.8, -72.66)),
+    ("galveston1900", "AL011900", 1900, "GALVESTON, TEXAS", (29.30, -94.80)),
+    ("laborday1935", "AL031935", 1935, "FLORIDA KEYS", (24.92, -80.63)),
+    ("newengland1938", "AL061938", 1938, "LONG ISLAND & NEW ENGLAND", (40.8, -72.66)),
     ("camille1969", "CAMILLE", 1969, "CAMILLE · PASS CHRISTIAN, MISSISSIPPI", (30.318, -89.25)),
     ("andrew1992", "ANDREW", 1992, "ANDREW · HOMESTEAD, FLORIDA", (25.47, -80.45)),
     ("katrina2005", "KATRINA", 2005, "KATRINA · MISSISSIPPI COAST", (30.2866, -89.3762)),
@@ -45,6 +46,24 @@ EVENTS = [
 # conservative values below the peak storm tide in the NHC Tropical Cyclone Reports / NWS event pages (sources.json: surge_visual)
 SURGE_M = {"galveston1900": 4.0, "laborday1935": 4.5, "newengland1938": 3.5, "camille1969": 6.0, "andrew1992": 2.0, "katrina2005": 7.0,
            "harvey2017": 3.0, "michael2018": 4.0, "ian2022": 3.5, "helene2024": 3.5}
+
+
+# short zooms: places checked on NWS / NHC pages (sources.json event_names_hurricane); unnamed storms by HURDAT2 id
+SHORTS = [
+    ("indianola1886", "AL051886", 1886, "INDIANOLA, TEXAS", (28.530, -96.505)),
+    ("seaislands1893", "AL061893", 1893, "SEA ISLANDS · BEAUFORT, SOUTH CAROLINA", (32.431, -80.670)),
+    ("corpus1919", "AL021919", 1919, "CORPUS CHRISTI, TEXAS", (27.800, -97.396)),
+    ("miami1926", "AL071926", 1926, "GREAT MIAMI HURRICANE · MIAMI, FLORIDA", (25.775, -80.190)),
+    ("hazel1954", "HAZEL", 1954, "HAZEL · CALABASH, NORTH CAROLINA", (33.890, -78.560)),
+    ("carla1961", "CARLA", 1961, "CARLA · PORT LAVACA, TEXAS", (28.615, -96.626)),
+    ("eloise1975", "ELOISE", 1975, "ELOISE · PANAMA CITY BEACH, FLORIDA", (30.176, -85.806)),
+    ("hugo1989", "HUGO", 1989, "HUGO · CHARLESTON, SOUTH CAROLINA", (32.770, -79.880)),
+    ("charley2004", "CHARLEY", 2004, "CHARLEY · PUNTA GORDA, FLORIDA", (26.930, -82.045)),
+    ("ike2008", "IKE", 2008, "IKE · BOLIVAR PENINSULA, TEXAS", (29.470, -94.630)),
+]
+SHORT_KEYS = {x[0] for x in SHORTS}
+SURGE_SHORT = {"indianola1886": 3.5, "seaislands1893": 3.5, "corpus1919": 3.5, "miami1926": 2.5, "hazel1954": 4.0, "carla1961": 4.0,
+               "eloise1975": 3.0, "hugo1989": 3.5, "charley2004": 2.0, "ike2008": 3.5}
 
 
 def category(kt):
@@ -126,8 +145,8 @@ class Data:
         self.yr = np.array([s.year for s in self.storms])
         # famous events
         self.events = []
-        for key, name, year, title, town in EVENTS:
-            c = [i for i, s in enumerate(self.storms) if s.year == year and s.name == name]
+        for key, name, year, title, town in EVENTS + SHORTS:
+            c = [i for i, s in enumerate(self.storms) if s.year == year and (s.sid == name if name.startswith("AL") else s.name == name)]
             if name == "UNNAMED" and len(c) > 1:
                 c = sorted(c, key=lambda i: -self.storms[i].cat)
             if not c:
@@ -136,7 +155,9 @@ class Data:
             s = self.storms[i]
             k = min(s.landfalls, key=lambda k: (s.lat[k] - town[0]) ** 2 + (s.lon[k] - town[1]) ** 2)
             self.events.append(dict(key=key, idx=i, title=title, town=town, lf=k, kt=int(s.wind[k]), cat=category(s.wind[k]),
-                                    date=s.t[k], surge_m=SURGE_M.get(key, 3.0)))
+                                    date=s.t[k], surge_m=SURGE_M.get(key, SURGE_SHORT.get(key, 3.0)), short=key in SHORT_KEYS,
+                                    S=SH_S if key in SHORT_KEYS else EV_S, HIT=SH_HIT if key in SHORT_KEYS else EV_HIT,
+                                    RUN=SH_RUN if key in SHORT_KEYS else EV_RUN))
         self.events.sort(key=lambda e: e["date"])
 
     def count_by_cat(self, mask=None):
@@ -202,8 +223,8 @@ class Timeline:
                 ph.append(dict(kind="run", mode="main", t0=t, t1=t + dur, a=cur, b=dte))
                 t += dur
                 e["t0"] = t
-                ph.append(dict(kind="event", mode="main", t0=t, t1=t + EV_S, ev=e, a=dte, b=dte))
-                t += EV_S
+                ph.append(dict(kind="event", mode="main", t0=t, t1=t + e["S"], ev=e, a=dte, b=dte))
+                t += e["S"]
                 cur = dte
                 ei += 1
             dur = (yr + 1 - cur) * YEAR_S
@@ -219,15 +240,15 @@ class Timeline:
         ev_by = {e["idx"]: e for e in D.events}
         for i, s in enumerate(D.storms):
             if i in ev_by:
-                land_t[i] = ev_by[i]["t0"] + EV_HIT + EV_RUN * 0.5
+                land_t[i] = ev_by[i]["t0"] + ev_by[i]["HIT"] + ev_by[i]["RUN"] * 0.5
             else:
                 land_t[i] = self.video_t(float(D.tl[i]))
         self.tl = land_t
         self.anim = np.full(n, self.ANIM)
         self.flf = np.array([s.landfalls[0] / max(1, len(s.t) - 1) for s in D.storms])
         for i, e in ev_by.items():
-            self.anim[i] = EV_S - 3.0
-            self.flf[i] = (EV_HIT + EV_RUN * 0.5 - 1.5) / self.anim[i]
+            self.anim[i] = e["S"] - 3.0
+            self.flf[i] = (e["HIT"] + e["RUN"] * 0.5 - 1.5) / self.anim[i]
         self.ta = self.tl - self.anim * self.flf
         order = np.argsort(self.tl, kind="stable")
         self.tl_sorted = self.tl[order]

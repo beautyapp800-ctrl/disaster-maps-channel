@@ -65,7 +65,11 @@ def state_centroids():
 
 
 def borders_overlay():
-    """Transparent overlay with thin bright state borders + country borders (drawn over the satellite map)."""
+    """Transparent base overlay. State borders are drawn by the scene as crisp ribbons (constant pixel width at every zoom)."""
+    return Image.new("RGBA", (TW, TH), (0, 0, 0, 0))
+
+
+def _old_borders_overlay():
     im = Image.new("RGBA", (TW, TH), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     lw = max(1, round(TW / 2048))
@@ -311,7 +315,7 @@ class Director:
                 c = od["center"]
                 O = np.array(FR.world(c[1], c[0]), float)
                 s_c = float(np.dot(O - pa, dv))
-                run = self.RUN_KM / core.KM_PER_UNIT
+                run = (1.7 if e.get("short") else self.RUN_KM) / core.KM_PER_UNIT
                 s0, s1 = max(0.0, s_c - run), min(L, s_c + run)
                 # The SPC path is a straight line between the official start and end points; the real tracks curve. NWS confirms each
                 # tornado hit the town named on the card, so in the close-up the path is placed (parallel to the SPC line, at most
@@ -322,7 +326,8 @@ class Director:
                 info.update(town=e["key"], s_c=s_c, s0=s0, s1=s1, pa=pa, pb=pb, shift_m=shift * core.KM_PER_UNIT * 1000.0)
             self.ev[e["key"]] = info
         # soft shake: only when the strongest (F5/EF5) famous tornado touches down in the close-up
-        self.hits = sorted((e["t0"] + EV_HIT, 0.0030) for e in D.events if D.mag[e["idx"]] == 5 and self.ev[e["key"]]["town"])
+        self.evd = {e["key"]: e for e in D.events}
+        self.hits = sorted((e["t0"] + e["HIT"], 0.0030) for e in D.events if D.mag[e["idx"]] == 5 and self.ev[e["key"]]["town"] and not e["short"])
         self.hit_t = [h[0] for h in self.hits]
 
     def town_shift(self, od, key, pa, dv, s0, s1, wd_yd):
@@ -377,21 +382,22 @@ class Director:
         p = self.TL.phase_at(t)
         return p if p["kind"] == "event" else None
 
-    def run_u(self, t, t0):
+    def run_u(self, t, t0, key):
         """0..1 progress of the close-up run"""
-        return min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
+        e = self.evd[key]
+        return min(1.0, max(0.0, (t - (t0 + e["HIT"])) / e["RUN"]))
 
     def along(self, key, t, t0):
         """distance of the vortex from the SPC path start (world units) during the close-up"""
         info = self.ev[key]
-        u = self.run_u(t, t0)
+        u = self.run_u(t, t0, key)
         return info["s0"] + (info["s1"] - info["s0"]) * u
 
     def vortex_frac(self, key, t, t0):
         info = self.ev[key]
         if info["town"]:
             return self.along(key, t, t0) / max(info["L"], 1e-12)
-        return min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
+        return self.run_u(t, t0, key)
 
     def ground(self, key, s):
         from . import mini
@@ -432,7 +438,7 @@ class Director:
         """low side view under the storm, rising at the end of the run to show the damage path"""
         info = self.ev[key]
         U = self.U
-        u = self.run_u(t, t0)
+        u = self.run_u(t, t0, key)
         g = self.ground(key, self.along(key, t, t0))
         rise = smooth((u - 0.62) / 0.38)
         h = (240 + 160 * rise) / U * core.EXAG      # target height above ground (scene flattens relief by 1/EXAG up close)
@@ -444,6 +450,7 @@ class Director:
 
     def event_cam(self, t, p):
         e = p["ev"]
+        S, HIT, RUN = e["S"], e["HIT"], e["RUN"]
         info = self.ev[e["key"]]
         tl = t - p["t0"]
         yaw = info["yaw"] + 25.0
@@ -454,13 +461,20 @@ class Director:
             reg = Cam(mid[0], mid[1], mid[2], self.REG_DIST, 50.0, yaw)
             if tl < 2.5:
                 return lerp_cam(orbit, reg, smooth(tl / 2.5))
-            if tl < EV_S - 3.5:
-                return lerp_cam(reg, reg2, smooth((tl - 2.5) / (EV_S - 6.0)))
-            return lerp_cam(reg2, orbit, smooth((tl - EV_S + 3.5) / 3.5))
+            if tl < S - 3.5:
+                return lerp_cam(reg, reg2, smooth((tl - 2.5) / (S - 6.0)))
+            return lerp_cam(reg2, orbit, smooth((tl - S + 3.5) / 3.5))
+        c0 = self.close_cam(e["key"], p["t0"] + HIT, p["t0"])
+        c1 = self.close_cam(e["key"], p["t0"] + HIT + RUN, p["t0"])
+        if e["short"]:
+            # short zoom: fly straight in to the storm view, follow the vortex through the town, fly back to the map
+            if tl < HIT:
+                return lerp_cam(orbit, c0, smooth(tl / HIT))
+            if tl < HIT + RUN:
+                return self.close_cam(e["key"], t, p["t0"])
+            return lerp_cam(c1, orbit, smooth((tl - HIT - RUN) / (S - HIT - RUN)))
         town = self.ground(e["key"], info["s_c"])
         reg = Cam(town[0], town[1], town[2], self.REG_DIST, 50.0, info["yaw"] + 70.0)
-        c0 = self.close_cam(e["key"], p["t0"] + EV_HIT, p["t0"])
-        c1 = self.close_cam(e["key"], p["t0"] + EV_HIT + EV_RUN, p["t0"])
         U = self.U
         O = self.ground(e["key"], self.city_s(e["key"]))
         side = np.array([-info["dir"][1], info["dir"][0]]) * (120 / U)
@@ -473,13 +487,13 @@ class Director:
             return lerp_cam(reg, city(0.0), smooth((tl - 2.0) / 2.5))
         if tl < 6.0:
             return city((tl - 4.5) / 1.5)
-        if tl < EV_HIT:
-            return lerp_cam(city(1.0), c0, smooth((tl - 6.0) / (EV_HIT - 6.0)))
-        if tl < EV_HIT + EV_RUN:
+        if tl < HIT:
+            return lerp_cam(city(1.0), c0, smooth((tl - 6.0) / (HIT - 6.0)))
+        if tl < HIT + RUN:
             return self.close_cam(e["key"], t, p["t0"])
-        if tl < EV_HIT + EV_RUN + 2.5:
-            return lerp_cam(c1, reg2, smooth((tl - EV_HIT - EV_RUN) / 2.5))
-        return lerp_cam(reg2, orbit, smooth((tl - EV_HIT - EV_RUN - 2.5) / (EV_S - EV_HIT - EV_RUN - 2.5)))
+        if tl < HIT + RUN + 2.5:
+            return lerp_cam(c1, reg2, smooth((tl - HIT - RUN) / 2.5))
+        return lerp_cam(reg2, orbit, smooth((tl - HIT - RUN - 2.5) / (S - HIT - RUN - 2.5)))
 
     def cam(self, t):
         p = self.event_phase(t)
@@ -492,6 +506,81 @@ class Director:
         d = c.dist * amp
         c.shake = (d * math.sin(t * 9.0), d * 0.5 * math.sin(t * 7.3 + 1.7), d * math.sin(t * 8.1 + 3.1))
         return c
+
+
+# ---------------------------------------------------------------- state names (general and middle shots)
+class StateLabels:
+    """State names placed at the pole of inaccessibility of each state's main polygon; full name when it fits inside the state on
+    screen, postal code otherwise, nothing when even that does not fit. Never over panels, captions or cards, never over each other.
+    Alpha eases in/out over 0.35 s so labels never pop."""
+
+    def __init__(self):
+        from shapely.geometry import Polygon
+        from shapely.ops import polylabel
+        self.items = []
+        for ab, rings in core.states().items():
+            ring = max(rings, key=lambda r: abs(Polygon(r).area))
+            pg = Polygon(ring).buffer(0)
+            lp = polylabel(pg, tolerance=pg.length / 400)
+            lon, lat = albers_inv(lp.x, lp.y)
+            k = max(1, len(ring) // 60)
+            samp = np.array([albers_inv(x, y) for x, y in ring[::k]])
+            self.items.append(dict(ab=ab, name=STATE_NAMES.get(ab, ab), p=world3(lon, lat), ring=world3(samp[:, 0], samp[:, 1]), area=abs(pg.area)))
+        self.items.sort(key=lambda it: -it["area"])
+        self.alpha = {}
+
+    def draw(self, img, vcam, yscale, avoid):
+        dist = vcam.dist
+        glob = float(np.clip((dist - 0.10) / 0.12, 0.0, 1.0))
+        size = int(K * (22 + 14 * float(np.clip((3.4 - dist) / 2.4, 0.0, 1.0))))
+        f = font(size)
+        track = size * 0.10
+        lay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(lay)
+        placed = [tuple(r) for r in avoid]
+        shown = []
+        step = 1.0 / (0.35 * FPS)
+        for it in self.items:
+            target = 0.0
+            text, box = None, None
+            if glob > 0:
+                p = it["p"].copy()
+                p[1] *= yscale
+                pp, ok = vcam.project(p[None], W, H)
+                x, y = float(pp[0, 0]), float(pp[0, 1])
+                r = it["ring"].copy()
+                r[:, 1] *= yscale
+                rp, rok = vcam.project(r, W, H)
+                if ok[0] and rok.all():
+                    span = rp[:, 0].max() - rp[:, 0].min()
+                    vspan = rp[:, 1].max() - rp[:, 1].min()
+                    for cand in (it["name"], it["ab"]):
+                        tw = sum(d.textlength(ch, font=f) for ch in cand) + track * (len(cand) - 1)
+                        if tw < span * 0.78 and size < vspan * 0.7:
+                            text = cand
+                            break
+                    if text:
+                        x0, y0 = x - tw / 2, y - size * 0.55
+                        box = (x0 - 6 * K, y0 - 6 * K, x0 + tw + 6 * K, y0 + size * 1.1 + 6 * K)
+                        inside = box[0] > 10 * K and box[2] < W - 10 * K and box[1] > 10 * K and box[3] < H - 10 * K
+                        free = not any(not (box[2] < b[0] or box[0] > b[2] or box[3] < b[1] or box[1] > b[3]) for b in placed)
+                        if inside and free:
+                            target = 1.0
+            a = self.alpha.get(it["ab"], target)
+            a = min(target, a + step) if target > a else max(target, a - step)
+            self.alpha[it["ab"]] = a
+            if a <= 0.01 or text is None:
+                continue
+            placed.append(box)
+            al = int(255 * a * glob * 0.92)
+            xx = box[0] + 6 * K
+            for ch in text:
+                d.text((xx, box[1] + 6 * K), ch, font=f, fill=(255, 255, 255, al), stroke_width=max(2, int(2.6 * K)), stroke_fill=(18, 22, 40, int(al * 0.85)))
+                xx += d.textlength(ch, font=f) + track
+            shown.append(text)
+        if shown:
+            img.paste(lay.convert("RGB"), (0, 0), lay.getchannel("A"))
+        return shown
 
 
 # ---------------------------------------------------------------- HUD
@@ -629,6 +718,7 @@ class Renderer:
         self.painter = Painter(self.D, self.TL)
         self.dir = Director(self.D, self.TL)
         self.scene = scene or MiniScene(W, H)
+        self.states = StateLabels()
         D = self.D
         cent = self.dir.cent
         counts = {s: int((D.st == s).sum()) for s in cent}
@@ -658,9 +748,14 @@ class Renderer:
         tl = t - ph["t0"]
         along = self.dir.along(e["key"], t, ph["t0"])
         hw_m = max(70.0, D.wd[i] * 0.9144 / 2 * 0.62)          # typical damage half-width (SPC width is the maximum)
-        u = self.dir.run_u(t, ph["t0"])
-        ca = smooth((tl - (EV_HIT - 2.2)) / 1.5) * (1.0 - smooth((u - 0.58) / 0.28))
-        fa = smooth((tl - (EV_HIT - 1.6)) / 1.0) * (1.0 - smooth((u - 0.62) / 0.22))
+        u = self.dir.run_u(t, ph["t0"], e["key"])
+        HIT = e["HIT"]
+        if e["short"]:
+            ca = smooth((tl - (HIT - 1.4)) / 1.0) * (1.0 - smooth((u - 0.75) / 0.25))
+            fa = smooth((tl - (HIT - 0.9)) / 0.8) * (1.0 - smooth((u - 0.80) / 0.20))
+        else:
+            ca = smooth((tl - (HIT - 2.2)) / 1.5) * (1.0 - smooth((u - 0.58) / 0.28))
+            fa = smooth((tl - (HIT - 1.6)) / 1.0) * (1.0 - smooth((u - 0.62) / 0.22))
         g = self.dir.ground(e["key"], along)
         loc = dict(key=e["key"], pa=tuple(info["pa"]), pb=tuple(info["pb"]), hw=hw_m / U, along=along, clen=hw_m * 0.8 / U,
                    storm=(g[0], g[2], 2800 / U, 0.55 * ca))
@@ -702,6 +797,7 @@ class Renderer:
                 fx = float(vcam.project(fp, W, H)[0][0, 0])
             labs = self.labels(img, vcam, min(1.0, (0.03 - cam.dist) / 0.01), fx)
         meta = self.hud(img, t, ph, cam)
+        meta["states"] = self.states.draw(img, vcam, self.scene.yscale(cam), [p[1] for p in meta["panels"] if p[2] > 0.02])
         meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"], labels=labs)
         return img, meta
 
@@ -746,7 +842,8 @@ class Renderer:
 
     def event_overlay(self, img, t, ph, cam):
         """After the close-up: the whole real path as a crisp line in the regional view."""
-        if t - ph["t0"] < EV_HIT + EV_RUN + 0.8 or cam.dist < 0.15:
+        ev = ph["ev"]
+        if ev["short"] or t - ph["t0"] < ev["HIT"] + ev["RUN"] + 0.8 or cam.dist < 0.15:
             return
         D = self.D
         i = ph["ev"]["idx"]
@@ -822,9 +919,11 @@ class Renderer:
             meta.update(count=k, deaths=deaths, cls={str(c): v for c, v in cls.items()}, dt=dt)
             if kind == "event":
                 tl = t - ph["t0"]
-                if 4.5 < tl < EV_S - 2.5:
-                    a = min(1.0, (tl - 4.5) / 0.5, (EV_S - 2.5 - tl) / 0.5)
-                    H_.card(img, event_card_lines(D, ph["ev"]), a, left=bool(self.dir.ev[ph["ev"]["key"]]["town"]))
+                ev = ph["ev"]
+                c0, c1 = (1.8, ev["S"] - 1.6) if ev["short"] else (4.5, ev["S"] - 2.5)
+                if c0 < tl < c1:
+                    a = min(1.0, (tl - c0) / 0.5, (c1 - tl) / 0.5)
+                    H_.card(img, event_card_lines(D, ev), a, left=bool(self.dir.ev[ev["key"]]["town"]))
             else:
                 cap, al = TL.caption_at(t)
                 if cap:

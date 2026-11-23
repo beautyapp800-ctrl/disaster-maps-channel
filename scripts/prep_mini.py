@@ -35,9 +35,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 os.environ.setdefault("TEXW", "4096")
 from disasters import core  # noqa: E402
 from prep_world import TOWNS, albers_inv, get  # noqa: E402
-from disasters.hurricane import EVENTS as H_EVENTS  # noqa: E402
+from disasters.hurricane import EVENTS as H_EVENTS, SHORTS as H_SHORTS  # noqa: E402
+from disasters.tornado import SHORT_KEYS as T_SHORTS  # noqa: E402
 
-HTOWNS = [e[0] for e in H_EVENTS]
+HTOWNS = [e[0] for e in H_EVENTS + H_SHORTS]
+LIGHT = set(HTOWNS) | set(T_SHORTS)     # mid level only, coarse source (keeps the PC download small)
 H_LEVELS = {"mid": (64.0, 4096, 0.0006)}      # hurricane towns: mid level only, coarser source (keeps the PC download small)
 
 Image.MAX_IMAGE_PIXELS = None
@@ -200,7 +202,7 @@ def region(keys):
         if (out / f"{key}.json").exists():
             continue
         meta = dict(key=key, center=[clat, clon], cx=cx, cz=cz, levels={})
-        for lvl, (km, n, deg) in (H_LEVELS if key in HTOWNS else LEVELS).items():
+        for lvl, (km, n, deg) in (H_LEVELS if key in LIGHT else LEVELS).items():
             size_w = km / core.KM_PER_UNIT
             lon, lat = world_grid_lonlat(cx, cz, size_w, n)
             pad = 0.02
@@ -325,6 +327,8 @@ if __name__ == "__main__":
     keys = [a for a in args if a in TOWNS or a in HTOWNS] or list(TOWNS)
     if "hurricanes" in args:
         keys = HTOWNS
+    if "shorts" in args:
+        keys = sorted(T_SHORTS) + [e[0] for e in H_SHORTS]
     if "osm" in what:
         try:
             osm(keys)

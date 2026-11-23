@@ -36,7 +36,8 @@ def build(path):
     storm = np.zeros(n, np.float32)
     for e in D.events:
         t0 = e["t0"]
-        pts = [(t0 + EV_HIT - 2.5, 0.0), (t0 + EV_HIT, 0.7), (t0 + EV_HIT + EV_RUN * 0.6, 1.0), (t0 + EV_HIT + EV_RUN + 1.5, 0.0)]
+        HIT, RUN = e["HIT"], e["RUN"]
+        pts = [(t0 + HIT - min(2.5, HIT), 0.0), (t0 + HIT, 0.7), (t0 + HIT + RUN * 0.6, 1.0), (t0 + HIT + RUN + 1.5, 0.0)]
         xs, ys = zip(*pts)
         i0, i1 = int(xs[0] * SR), int(xs[-1] * SR)
         storm[i0:i1] = np.maximum(storm[i0:i1], np.interp(t[i0:i1], xs, ys))

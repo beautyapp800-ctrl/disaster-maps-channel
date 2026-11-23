@@ -1068,6 +1068,17 @@ void main(){
   c = vec4(vec3(0.86,0.89,0.93)*a*amount*0.30, a*amount*0.30);
 }"""
 
+VS_BORDER = """#version 330
+uniform mat4 mvp; uniform float yscale; uniform float hw; uniform float lift;
+in vec3 p; in vec2 pr; in float side; out float vs;
+void main(){ vec3 q = vec3(p.x + pr.x*side*hw, p.y*yscale + lift, p.z + pr.y*side*hw); gl_Position = mvp*vec4(q, 1.0); vs = side; }"""
+FS_BORDER = """#version 330
+uniform float alpha; in float vs; out vec4 c;
+void main(){ float s = abs(vs); float core = 1.0 - smoothstep(0.30, 0.45, s);
+  vec3 col = mix(vec3(1.0), vec3(0.16,0.18,0.26), core);
+  float a = alpha*mix(0.80, 0.85, core)*(1.0 - smoothstep(0.85, 1.0, s));
+  c = vec4(col*a, a); }"""
+
 VS_PUFF = """#version 330
 uniform mat4 mvp; uniform vec3 cen; uniform float spin; uniform float tm;
 in vec3 p; in vec4 ia; in float ib;          // ia = (radius_frac_x, y, radius_frac_z, size), ib = shade
@@ -1266,6 +1277,10 @@ class MiniScene:
         self.p_fun = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_FUN)
         self.p_cloudv = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_CLOUDV)
         self.p_hurr = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_HURR)
+        self.p_border = ctx.program(vertex_shader=VS_BORDER, fragment_shader=FS_BORDER)
+        bv = self._border_mesh()
+        self.vao_border = ctx.vertex_array(self.p_border, [(ctx.buffer(bv.tobytes()), "3f 2f 1f", "p", "pr", "side")])
+        self.n_border = len(bv)
         self.p_rain = ctx.program(vertex_shader=VS_SKY, fragment_shader=FS_RAIN)
         self.vao_rain = ctx.vertex_array(self.p_rain, [(ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], "f4").tobytes()), "2f", "p")])
         self.t_dem0 = ctx.texture((2, 2), 1, np.zeros(4, "f4").tobytes(), dtype="f4")
@@ -1307,6 +1322,50 @@ class MiniScene:
         self.smap.filter = (moderngl.LINEAR, moderngl.LINEAR)
         self.smap.repeat_x = self.smap.repeat_y = False
         self.sfb = ctx.framebuffer(depth_attachment=self.smap)
+
+    @staticmethod
+    def _border_mesh():
+        """state borders (US Census cartographic boundaries) as ribbons: two triangles per segment, widened in the shader"""
+        from mapviz.core import states
+        out = []
+        for rings in states().values():
+            for rg in rings:
+                u, v = FR.xy(rg[:, 0], rg[:, 1])
+                wx, wz = (np.asarray(u) / TW - 0.5) * WORLD_W, (np.asarray(v) / TH - 0.5) * WORLD_H
+                lon, lat = _inv_world(wx, wz)
+                wy = height_at(lon, lat)
+                P = np.stack([wx, wy, wz], 1)
+                a, b = P[:-1], P[1:]
+                d = b[:, [0, 2]] - a[:, [0, 2]]
+                L = np.linalg.norm(d, axis=1)
+                ok = L > 1e-9
+                a, b, d, L = a[ok], b[ok], d[ok], L[ok]
+                n = np.stack([-d[:, 1], d[:, 0]], 1) / L[:, None]
+                one = np.ones((len(a), 1))
+                va = lambda P_, s_: np.concatenate([P_, n, one * s_], 1)  # noqa: E731
+                quad = np.stack([va(a, -1), va(b, -1), va(b, 1), va(a, -1), va(b, 1), va(a, 1)], 1).reshape(-1, 6)
+                out.append(quad)
+        return np.concatenate(out).astype("f4")
+
+    def _borders(self, M, cam, yscale):
+        ctx, mgl = self.ctx, self.mgl
+        al = float(np.clip((cam.dist - 0.03) / 0.06, 0.0, 1.0))
+        if al <= 0.01:
+            return
+        ctx.enable(mgl.BLEND)
+        ctx.blend_func = mgl.ONE, mgl.ONE_MINUS_SRC_ALPHA
+        self.msaa.depth_mask = False
+        ctx.depth_func = "<="
+        px = 3.4 * self.H / 1080.0
+        hw = px / 2 * 2 * math.tan(math.radians(cam.FOV) / 2) * cam.dist / self.H
+        p = self.p_border
+        p["mvp"].write(_b(M))
+        for k, v in dict(yscale=float(yscale), hw=float(hw), lift=float(cam.dist * 0.0015), alpha=al).items():
+            _set(p, k, v)
+        self.vao_border.render()
+        ctx.depth_func = "<"
+        self.msaa.depth_mask = True
+        ctx.disable(mgl.BLEND)
 
     def _tex(self, img, mip=False, repeat=False):
         mgl = self.mgl
@@ -1577,6 +1636,7 @@ class MiniScene:
                 if f"tree_{kind}" in R:
                     vao, _, nI = R[f"tree_{kind}"]
                     vao.render(instances=nI)
+        self._borders(M0, cam, yscale)
         # bars
         if bars:
             for (x, y, z, w, h, col) in bars:

@@ -41,7 +41,7 @@ def build(out: Path):
     res["A_all_hurricanes"] = (img, mask, boxes)
     # B: flooded town close-up (Katrina)
     e = [x for x in D.events if x["key"] == "katrina2005"][0]
-    t = e["t0"] + EV_HIT + EV_RUN * 0.55
+    t = e["t0"] + e["HIT"] + e["RUN"] * 0.55
     ph = TL.phase_at(t)
     P.update(t, "main")
     sc.set_overlay(P.texture(t, "main"))

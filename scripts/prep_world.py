@@ -142,6 +142,10 @@ TOWNS = {  # town centre (lat, lon) used to frame the close-up; names verified o
     "waco": (31.549, -97.147), "flint": (43.090, -83.700), "ruskin": (38.940, -94.530), "jackson": (32.250, -90.210),
     "xenia": (39.685, -83.930), "moore99": (35.339, -97.487), "greensburg": (37.603, -99.293), "hackleburg": (34.277, -87.828),
     "joplin": (37.084, -94.513), "moore13": (35.339, -97.487), "mayfield": (36.742, -88.637),
+    # short zooms (owner 23.11), town centres; names checked on NWS pages (sources.json event_names)
+    "dunlap1965": (41.637, -85.922), "lubbock1970": (33.584, -101.845), "wichitafalls1979": (33.896, -98.513),
+    "plainfield1990": (41.627, -88.204), "jarrell1997": (30.824, -97.604), "jacksontn2003": (35.6145, -88.8139),
+    "vilonia2014": (35.084, -92.208), "rollingfork2023": (32.9068, -90.8782),
 }
 WIN_KM = (32.0, 18.0)
 

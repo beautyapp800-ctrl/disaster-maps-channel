@@ -206,11 +206,12 @@ class Director:
         p = self.TL.phase_at(t)
         return p if p["kind"] == "event" else None
 
-    def run_u(self, t, t0):
-        return min(1.0, max(0.0, (t - (t0 + EV_HIT)) / EV_RUN))
+    def run_u(self, t, t0, e):
+        return min(1.0, max(0.0, (t - (t0 + e["HIT"])) / e["RUN"]))
 
     def event_cam(self, t, p):
         e = p["ev"]
+        S, HIT, RUN = e["S"], e["HIT"], e["RUN"]
         info = self.ev[e["key"]]
         tl = t - p["t0"]
         tw = info["tw"]
@@ -220,9 +221,9 @@ class Director:
         if not info["town"]:
             if tl < 2.5:
                 return lerp_cam(orbit, reg, smooth(tl / 2.5))
-            if tl < EV_S - 3.5:
-                return lerp_cam(reg, reg2, smooth((tl - 2.5) / (EV_S - 6.0)))
-            return lerp_cam(reg2, orbit, smooth((tl - EV_S + 3.5) / 3.5))
+            if tl < S - 3.5:
+                return lerp_cam(reg, reg2, smooth((tl - 2.5) / (S - 6.0)))
+            return lerp_cam(reg2, orbit, smooth((tl - S + 3.5) / 3.5))
         U = self.U
         yaw = info["yaw"] + 70.0
 
@@ -232,19 +233,25 @@ class Director:
         def close(u):
             rise = smooth((u - 0.62) / 0.38)
             return Cam(tw[0], tw[1] + (120 + 200 * rise) / U * core.EXAG, tw[2], (1300 + 1400 * rise) / U, 10.0 + 24.0 * rise, yaw + 14.0 * u)
+        if e["short"]:
+            if tl < HIT:
+                return lerp_cam(orbit, close(0.0), smooth(tl / HIT))
+            if tl < HIT + RUN:
+                return close(self.run_u(t, p["t0"], e))
+            return lerp_cam(close(1.0), orbit, smooth((tl - HIT - RUN) / (S - HIT - RUN)))
         if tl < 2.0:
             return lerp_cam(orbit, reg, smooth(tl / 2.0))
         if tl < 4.5:
             return lerp_cam(reg, city(0.0), smooth((tl - 2.0) / 2.5))
         if tl < 6.0:
             return city((tl - 4.5) / 1.5)
-        if tl < EV_HIT:
-            return lerp_cam(city(1.0), close(0.0), smooth((tl - 6.0) / (EV_HIT - 6.0)))
-        if tl < EV_HIT + EV_RUN:
-            return close(self.run_u(t, p["t0"]))
-        if tl < EV_HIT + EV_RUN + 2.5:
-            return lerp_cam(close(1.0), reg2, smooth((tl - EV_HIT - EV_RUN) / 2.5))
-        return lerp_cam(reg2, orbit, smooth((tl - EV_HIT - EV_RUN - 2.5) / (EV_S - EV_HIT - EV_RUN - 2.5)))
+        if tl < HIT:
+            return lerp_cam(city(1.0), close(0.0), smooth((tl - 6.0) / (HIT - 6.0)))
+        if tl < HIT + RUN:
+            return close(self.run_u(t, p["t0"], e))
+        if tl < HIT + RUN + 2.5:
+            return lerp_cam(close(1.0), reg2, smooth((tl - HIT - RUN) / 2.5))
+        return lerp_cam(reg2, orbit, smooth((tl - HIT - RUN - 2.5) / (S - HIT - RUN - 2.5)))
 
     def cam(self, t):
         p = self.event_phase(t)
@@ -290,6 +297,8 @@ class Renderer:
         self.painter = Painter(self.D, self.TL)
         self.dir = Director(self.D, self.TL)
         self.scene = scene or MiniScene(W, H)
+        from .renderer import StateLabels
+        self.states = StateLabels()
         cent = state_centroids()
         counts = self.TL.state_counts
         mx = max(counts.values())
@@ -346,9 +355,10 @@ class Renderer:
         if not info["town"]:
             return None
         tl = t - ph["t0"]
-        u = self.dir.run_u(t, ph["t0"])
+        u = self.dir.run_u(t, ph["t0"], e)
         U = self.U
-        storm = smooth((tl - (EV_HIT - 2.0)) / 2.0) * (1.0 - smooth((u - 0.7) / 0.3))
+        lead = 1.2 if e["short"] else 2.0
+        storm = smooth((tl - (e["HIT"] - lead)) / lead) * (1.0 - smooth((u - 0.7) / 0.3))
         tw = info["tw"]
         loc = dict(key=e["key"], pa=(0.0, 0.0), pb=(1e-6, 0.0), hw=0.0, along=0.0, clen=1e-4, storm=(tw[0], tw[2], 9000 / U, 0.6 * storm),
                    wind=storm, rain=storm if cam.dist < 0.03 else 0.0)
@@ -379,6 +389,7 @@ class Renderer:
                 bars.append((x, y, z, 0.085, max(0.004, v * 0.62 * g), self.bar_color(v)))
         img = self.scene.render(cam, tm=t, dim=0.92 if mode in ("heat", "bars") else 1.0, ovl_alpha=ovl_alpha, bars=bars, local=loc, hurricanes=hur)
         meta = self.hud(img, t, ph, cam)
+        meta["states"] = self.states.draw(img, self.scene.view_cam(cam), self.scene.yscale(cam), [p[1] for p in meta["panels"] if p[2] > 0.02])
         meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"], storms=len(hur))
         return img, meta
 
@@ -404,9 +415,11 @@ class Renderer:
             meta.update(count=k, major=major, cats={str(c): v for c, v in cats.items()}, dt=dt)
             if kind == "event":
                 tl = t - ph["t0"]
-                if 4.5 < tl < EV_S - 2.5:
-                    a = min(1.0, (tl - 4.5) / 0.5, (EV_S - 2.5 - tl) / 0.5)
-                    H_.card(img, event_card_lines(D, ph["ev"]), a, left=bool(self.dir.ev[ph["ev"]["key"]]["town"]))
+                ev = ph["ev"]
+                c0, c1 = (1.8, ev["S"] - 1.6) if ev["short"] else (4.5, ev["S"] - 2.5)
+                if c0 < tl < c1:
+                    a = min(1.0, (tl - c0) / 0.5, (c1 - tl) / 0.5)
+                    H_.card(img, event_card_lines(D, ev), a, left=bool(self.dir.ev[ev["key"]]["town"]))
             else:
                 cap, al = TL.caption_at(t)
                 if cap:

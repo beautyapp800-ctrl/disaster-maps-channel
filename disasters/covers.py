@@ -105,7 +105,7 @@ def build(out: Path):
 
     # B: the town close-up: Moore 2013 EF5 in the miniature-world town (OSM buildings, trees), funnel, mother cloud, damage path
     e = ev["moore13"]
-    t = e["t0"] + EV_HIT + 3.6
+    t = e["t0"] + e["HIT"] + 3.6
     ph = TL.phase_at(t)
     P.update(t, "main")
     sc.set_overlay(P.texture(t, "main"))

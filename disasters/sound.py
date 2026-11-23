@@ -78,7 +78,7 @@ def build(path):
     for i in np.where(TL.anim > 0)[0]:
         is_ev = i in evs
         t0 = TL.ta[i]
-        dur = EV_RUN if is_ev else TL.anim[i]
+        dur = TL.anim[i]
         a0, a1 = int(max(0, t0 - 0.4) * SR), int(min(TL.total, t0 + dur + (1.6 if is_ev else 0.8)) * SR)
         if a1 <= a0:
             continue

@@ -15,10 +15,11 @@ import numpy as np
 from .core import ROOT
 
 FPS = 24
-YEAR_S = 4.5          # seconds of video per year
+YEAR_S = 3.6          # seconds of video per year
 EV_S = 22.0           # a zoom-in stop on a famous tornado (national -> regional -> town from above -> storm close-up -> back)
 EV_HIT = 7.0          # seconds after stop start when the close-up run starts
 EV_RUN = 8.0          # close-up: the vortex crosses the town
+SH_S, SH_HIT, SH_RUN = 10.0, 2.4, 5.4     # short zoom to another strong tornado (owner 23.11: every 30-40 s)
 INTRO_S, HEAT_S, BARS_S, FIN_S = 24.0, 24.0, 22.0, 26.0
 Y0, Y1 = 1950, 2025
 
@@ -47,6 +48,20 @@ EVENTS = [
 ]
 
 
+# short zooms (owner 23.11): other strong tornadoes, about every 30-40 s; place names checked on NWS pages (sources.json event_names)
+SHORTS = [
+    ("dunlap1965", "DUNLAP, INDIANA", "1965-04-11", "IN", "18:10", None),
+    ("lubbock1970", "LUBBOCK, TEXAS", "1970-05-11", "TX", "20:35", None),
+    ("wichitafalls1979", "WICHITA FALLS, TEXAS", "1979-04-10", "TX", "17:50", None),
+    ("plainfield1990", "PLAINFIELD, ILLINOIS", "1990-08-28", "IL", "14:30", None),
+    ("jarrell1997", "JARRELL, TEXAS", "1997-05-27", "TX", "14:40", None),
+    ("jacksontn2003", "JACKSON, TENNESSEE", "2003-05-04", "TN", "22:35", None),
+    ("vilonia2014", "MAYFLOWER-VILONIA, ARKANSAS", "2014-04-27", "AR", "18:06", None),
+    ("rollingfork2023", "ROLLING FORK, MISSISSIPPI", "2023-03-24", "MS", "18:57", None),
+]
+SHORT_KEYS = {x[0] for x in SHORTS}
+
+
 class Data:
     def __init__(self, path=None):
         path = path or ROOT / "data" / "raw" / "tornadoes.csv"
@@ -69,11 +84,13 @@ class Data:
         self.ln = np.array(c[11]); self.wd = np.array(c[12]); self.st = np.array(c[13]); self.date = np.array(c[14]); self.time = np.array(c[15])
         self.n = len(self.dt)
         self.events = []
-        for key, title, date, st, tm, extra in EVENTS:
+        for key, title, date, st, tm, extra in EVENTS + SHORTS:
             m = np.where((self.date == date) & (self.st == st) & (self.time == tm))[0]
             assert len(m) >= 1, f"event row not found: {key}"
             i = int(m[np.argmax(self.fat[m])])
-            ev = dict(key=key, title=title, idx=i, date=date, extra=None)
+            short = key in SHORT_KEYS
+            ev = dict(key=key, title=title, idx=i, date=date, extra=None, short=short,
+                      S=SH_S if short else EV_S, HIT=SH_HIT if short else EV_HIT, RUN=SH_RUN if short else EV_RUN)
             if extra:
                 a, b, fmt = extra
                 ev["extra"] = fmt.format(n=int(((self.date >= a) & (self.date <= b)).sum()))
@@ -125,10 +142,10 @@ class Timeline:
                 run(cur_i, e["idx"], cur, dte, t, dur)
                 t += dur
                 e["t0"] = t
-                ph.append(dict(kind="event", mode="main", t0=t, t1=t + EV_S, ev=e, a=dte, b=dte))
-                ta[e["idx"]] = t + EV_HIT
-                anim[e["idx"]] = EV_RUN
-                t += EV_S
+                ph.append(dict(kind="event", mode="main", t0=t, t1=t + e["S"], ev=e, a=dte, b=dte))
+                ta[e["idx"]] = t + e["HIT"]
+                anim[e["idx"]] = e["RUN"]
+                t += e["S"]
                 cur, cur_i = dte, e["idx"] + 1
             dur = (yr + 1 - cur) * YEAR_S
             ph.append(dict(kind="run", mode="main", t0=t, t1=t + dur, a=cur, b=float(yr + 1)))
