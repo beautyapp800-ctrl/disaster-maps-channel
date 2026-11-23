@@ -247,7 +247,8 @@ class Timeline:
                         out.append((cand, cand + dur, text))
                         break
                     cand += 0.5
-        out.append((self.main_end + HEAT_S * 0.08, self.main_end + HEAT_S * 0.08 + 5.0, "WHERE TORNADOES STRIKE MOST OFTEN"))
+        st0 = max([self.main_end + HEAT_S * 0.08] + [c[1] + 1.05 for c in out if c[1] > self.main_end - 8])
+        out.append((st0, st0 + 5.0, "WHERE TORNADOES STRIKE MOST OFTEN"))
         b0 = self.main_end + HEAT_S
         out.append((b0 + 8.0, b0 + 14.0, f"{STATE_NAMES[top_state]}: {fmt(top_n)} TORNADOES, MORE THAN ANY OTHER STATE"))
         out.sort()

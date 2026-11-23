@@ -1,0 +1,120 @@
+name: fix-segment
+# Re-render only some segments of an earlier pilot run (artifacts are kept 7 days) and re-assemble the film from the old segments + the
+# new ones, then QA and (optionally) store the draft release. Use after a QA failure that is limited to a few frames: run it on a ref that is the
+# commit of the original run plus the fix, so the new segments match the old ones.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: {description: "pilot run id that holds the seg-* and covers artifacts", required: true}
+      segs: {description: "JSON list of segment numbers to re-render, e.g. [35]", required: true}
+      engine: {default: "tornado"}
+      res: {default: "2160"}
+      texw: {default: "4096"}
+      segments: {description: "number of segments of the original run", default: "40"}
+      crf: {default: "20"}
+      slug: {default: ""}
+      topic: {default: ""}
+permissions:
+  contents: write
+  actions: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        seg: ${{ fromJson(inputs.segs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp moderngl shapely
+      - name: Miniature-world data (NLCD, 3DEP, OSM) from branch data-mini
+        run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
+      - run: bash scripts/fetch_raw.sh
+      - name: Render segment
+        env:
+          RES: ${{ inputs.res }}
+          TEXW: ${{ inputs.texw }}
+          TOPIC: ${{ inputs.topic }}
+        run: python -m ${{ fromJSON('{"tornado":"disasters.renderer","hurricane":"disasters.hurricane_render","earthquake":"disasters.quake_render"}')[inputs.engine] }} --seg ${{ matrix.seg }} --of ${{ inputs.segments }} --out out/seg --crf ${{ inputs.crf }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fixseg-${{ matrix.seg }}
+          path: out/seg
+          retention-days: 7
+  assemble:
+    needs: [render]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp shapely
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - run: bash scripts/fetch_raw.sh
+      - name: Old segments of the original run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: seg-*
+          path: segs
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: New segments replace the old ones
+        run: |
+          for n in $(python3 -c "import json;print(' '.join(map(str, json.loads('${{ inputs.segs }}'))))"); do rm -rf "segs/seg-$n"; done
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fixseg-*
+          path: newsegs
+      - name: Merge
+        run: |
+          for d in newsegs/fixseg-*; do n=${d##*-}; mkdir -p "segs/seg-$n"; cp -r "$d"/. "segs/seg-$n/"; done
+          ls segs | wc -l
+      - name: Assemble, music -14 LUFS, verify, QA
+        env:
+          ENGINE: ${{ inputs.engine }}
+          TOPIC: ${{ inputs.topic }}
+        run: |
+          EXP=$(python3 scripts/total_seconds.py)
+          python scripts/assemble.py segs out/final $EXP ${{ inputs.res }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: review
+          path: |
+            out/final/preview_480p.mp4
+            out/final/contact_sheet.jpg
+            out/final/qa_report.md
+            out/final/verify.json
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: out/final/final.mp4
+          retention-days: 14
+          compression-level: 0
+      - name: Covers of the original run
+        if: inputs.slug != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: covers
+          path: dl/covers
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Draft release reserve-slug (no YouTube upload)
+        if: inputs.slug != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ inputs.slug }}
+          RES: ${{ inputs.res }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p dl/video dl/review
+          cp out/final/final.mp4 dl/video/
+          cp out/final/preview_480p.mp4 out/final/contact_sheet.jpg out/final/qa_report.md out/final/verify.json dl/review/
+          bash scripts/store_release.sh
