@@ -386,7 +386,7 @@ class Renderer:
         cam = self.dir.cam(t)
         self.scene.set_overlay(tex)
         kz = min(1.0, max(0.0, (3.2 - cam.dist) / 1.6))
-        ovl_alpha = (1.0 - 0.6 * kz) * min(1.0, max(0.0, (cam.dist - 0.25) / 0.75)) if mode == "main" else 1.0
+        ovl_alpha = min(1.0, max(0.10, (cam.dist - 0.02) / 0.30)) if mode == "main" else 1.0
         bars, hur = [], []
         loc = self.local_params(t, ph, cam) if mode == "main" else None
         if mode in ("main", "intro") and not (loc is not None and cam.dist < 0.3):
