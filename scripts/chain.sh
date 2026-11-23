@@ -7,8 +7,8 @@ REPO="${GITHUB_REPOSITORY}"
 git fetch -q origin data-mini || { echo "no data-mini yet"; exit 0; }
 have() { git ls-tree -r --name-only origin/data-mini data/osm | grep -c "/$1.json.gz"; }
 count() { local n=0; for k in "$@"; do n=$((n + $(have "$k"))); done; echo $n; }
-TORN="waco flint ruskin jackson xenia moore99 greensburg hackleburg joplin moore13 mayfield"
-HURR="galveston1900 laborday1935 newengland1938 camille1969 andrew1992 katrina2005 harvey2017 michael2018 ian2022 helene2024"
+TORN="waco flint ruskin jackson xenia moore99 greensburg hackleburg joplin moore13 mayfield dunlap1965 lubbock1970 wichitafalls1979 plainfield1990 jarrell1997 jacksontn2003 vilonia2014 rollingfork2023"
+HURR="galveston1900 laborday1935 newengland1938 camille1969 andrew1992 katrina2005 harvey2017 michael2018 ian2022 helene2024 indianola1886 seaislands1893 corpus1919 miami1926 hazel1954 carla1961 eloise1975 hugo1989 charley2004 ike2008"
 
 active=$(gh run list --workflow pilot.yml --json status -q '[.[]|select(.status!="completed")]|length')
 prep=$(gh run list --workflow prep-mini.yml --json status -q '[.[]|select(.status!="completed")]|length')
@@ -25,7 +25,7 @@ print('none' if not r else r[0]['conclusion'])" "$1" "$2" "$3"; }
 
 launch() {  # engine res slug tag
   echo "launching $1 at $2p ($4)"
-  gh workflow run pilot.yml --ref dev -f engine="$1" -f res="$2" -f texw=4096 -f segments=32 -f crf=20 -f slug="$3" -f store=true -f tag="$4"
+  gh workflow run pilot.yml --ref dev -f engine="$1" -f res="$2" -f texw=4096 -f segments=40 -f crf=20 -f slug="$3" -f store=true -f tag="$4"
   exit 0
 }
 step() {  # engine slug tag keys...
@@ -41,7 +41,7 @@ step() {  # engine slug tag keys...
   # no 4K run yet: data must be complete (all prep jobs finished, at least all but one town present)
   [ "$prep" != "0" ] && { echo "waiting for data jobs"; exit 0; }
   local got; got=$(count "$@")
-  if [ "$got" -lt $((total - 1)) ]; then
+  if [ "$got" -lt $((total - 2)) ]; then
     missing=""; for k in "$@"; do [ "$(have "$k")" = "0" ] && missing="$missing $k"; done
     tries=$(gh run list --workflow prep-mini.yml --limit 50 --json displayTitle -q '[.[]|select(.displayTitle|test("osm"))]|length')
     if [ "$tries" -lt 8 ]; then echo "retry OSM for:$missing"; gh workflow run prep-mini.yml --ref dev -f what="osm$missing"; fi
@@ -49,7 +49,7 @@ step() {  # engine slug tag keys...
   fi
   launch "$eng" 2160 "$slug" "$tag"
 }
-# hurricane first (already running untagged), then the tornado film v3 (close-up paths placed through the town, farmland fields)
-step hurricane us-hurricane-landfalls-1851-2025 "" $HURR
-step tornado us-tornadoes-1950-2025 v3 $TORN
+# v4 (owner 23.11): state names + crisp borders, short zooms every 30-40 s; tornado first, then hurricanes
+step tornado us-tornadoes-1950-2025 v4 $TORN
+step hurricane us-hurricane-landfalls-1851-2025 v4 $HURR
 echo "all films built"

@@ -1,4 +1,4 @@
-"""Branding options (3 avatars + 3 banners) for the disaster-maps channel.
+"""Branding options (3 avatars + 3 banners) for the Storm Atlas USA channel (@StormAtlasUSA).
 
 Real data only: NOAA SPC tornado database 1950-2025 (data/raw/tornadoes.csv),
 NOAA NHC HURDAT2 1851-2025 (data/raw/hurdat2.txt), US Census state shapes.
@@ -28,8 +28,8 @@ LAND = (250, 240, 214)
 BORDER = (40, 40, 60)
 YEL = (255, 214, 0)
 F_COL = {0: (120, 200, 90), 1: (255, 225, 40), 2: (255, 150, 0), 3: (240, 60, 30), 4: (205, 0, 90), 5: (130, 0, 170)}
-NAME = "EVERY DISASTER MAPPED"
-TAG = "Every disaster in U.S. history, mapped from real NOAA & USGS data"
+NAME = "STORM ATLAS USA"
+TAG = "U.S. disasters, mapped from real NOAA & USGS data"
 
 
 def tornadoes():
@@ -185,7 +185,7 @@ def avatar_b(tracks):
 
 
 def avatar_c(rows):
-    """C: US silhouette filled with all 73k tracks + shock-wave rings, 'EDM' badge."""
+    """C: US silhouette filled with all 73k tracks + shock-wave rings, 'SA' badge."""
     s = 800
     fr = Frame(s, s, -125, 24, -66, 50, fit=True)
     img = Image.new("RGB", (s, s), YEL)
@@ -204,7 +204,7 @@ def avatar_c(rows):
     img.paste((20, 20, 40), (0, 0), sh)
     img.paste(land, (0, 0), m)
     d = ImageDraw.Draw(img)
-    outlined(d, (s / 2, s * 0.80), "EDM", 190, fill=(255, 255, 255), stroke=12)
+    outlined(d, (s / 2, s * 0.80), "SA", 230, fill=(255, 255, 255), stroke=14)
     return circle_crop(img)
 
 
@@ -212,7 +212,7 @@ def avatar_c(rows):
 def banner_common(img, title_fill=(255, 255, 255)):
     d = ImageDraw.Draw(img)
     W, H = img.size
-    outlined(d, (W / 2, H / 2 - 50), NAME, 150, fill=title_fill, stroke=14)
+    outlined(d, (W / 2, H / 2 - 50), NAME, 170, fill=title_fill, stroke=14)
     outlined(d, (W / 2, H / 2 + 80), TAG, 54, fill=YEL, stroke=8)
     outlined(d, (W / 2, H / 2 + 160), "2 NEW MAPS EVERY WEEK", 46, fill=(255, 255, 255), stroke=7)
     return img

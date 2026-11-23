@@ -706,7 +706,7 @@ void main(){
     col = mix(vec3(0.30,0.71,0.90), vec3(0.11,0.47,0.82), smoothstep(0.5, 0.8, sf));
     col = mix(col, vec3(0.78,0.89,0.98), fres*0.55);
     float spec = pow(max(dot(reflect(-SUN, wn), v), 0.0), 160.0);
-    col += vec3(1.0,0.98,0.92)*spec*1.4*sh;
+    col += vec3(1.0,0.98,0.92)*spec*1.4*sh*(1.0 - smoothstep(0.02, 0.15, camdist));
     col *= mix(0.72, 1.0, sh);
     float fl = 1.0 - smoothstep(0.0, 0.035, sf - 0.5);
     col = mix(col, vec3(0.96,0.98,1.0), fl*0.55);
@@ -1009,7 +1009,7 @@ float dens(vec3 q){
   float r = length(p);
   if (r > 1.0) return 0.0;
   float th = atan(p.y, p.x);
-  float a = th + tm*spin*(1.2 - 0.6*r);
+  float a = th + tm*spin;              // rigid rotation (differential rotation wound the arms into rings over time)
   float arms = 0.5 + 0.5*sin(3.0*a - 6.0*log(r + 0.04) + seed);
   vec2 pr = vec2(cos(a), sin(a))*r;
   float n1 = texture(noise, pr*1.6 + vec2(seed*0.13, 0.3)).r;
@@ -1019,7 +1019,7 @@ float dens(vec3 q){
   float core = 1.0 - smoothstep(0.22, 0.48, r);
   float d = (core*0.95 + arms*(1.0 - core)*1.0) * (0.55 + 0.7*n1) * (0.75 + 0.5*n2) + wall*1.3;
   d *= smoothstep(eyer*0.75, eyer*1.1, r) * (1.0 - smoothstep(0.6 + 0.3*n1, 1.0, r));
-  float top = Hh*(0.35 + 0.65*(1.0 - r*r))*(0.8 + 0.4*n2);
+  float top = Hh*(0.62 + 0.25*n2 + 0.13*n1)*(1.0 - 0.35*smoothstep(0.55, 1.0, r));
   float bot = Hh*0.08*(1.0 + n1);
   return d * smoothstep(bot, bot + Hh*0.06, q.y) * (1.0 - smoothstep(top - Hh*0.08, top, q.y));
 }

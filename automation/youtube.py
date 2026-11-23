@@ -1,12 +1,12 @@
-"""YouTube for America Over Time: private uploads with a publishAt, never twice, never to another channel.
+"""YouTube for Storm Atlas USA (@StormAtlasUSA): private uploads with a publishAt, never twice, never to another channel.
 
-Token: YT_TOKEN_JSON (OAuth refresh token of THIS channel, Google Cloud project hypothetica-511509), environment only.
-Channel guard: the id of the channel the token opens must equal YT_CHANNEL_ID (GitHub variable). Anything else -> no upload
-(owner: never upload to What If or any other channel by mistake).
-Anti-duplicate (same rules as the archive channel, owner 17.11): the channel's COMPLETE uploads list is read (every page,
-retried, checked against the ids the state knows); a video whose description carries "[ref: map-timelapse/<slug>]" or has the
-same title is the episode already uploaded. If the list cannot be read in full, Doubt is raised: nothing is uploaded.
-Slots: Monday and Friday 20:00 Europe/Kyiv (the zone's DST is handled by zoneinfo), at least 30 min ahead, one video a day.
+Token: YT_TOKEN_JSON (OAuth refresh token of THIS channel, Google Cloud project gen-lang-client-0367233741), environment only.
+Channel guard: the id of the channel the token opens must equal YT_CHANNEL_ID (GitHub variable). Anything else -> no upload.
+Anti-duplicate: the channel's COMPLETE uploads list is read (every page, checked against the ids the state knows); a video whose
+description carries "[ref: stormatlasusa/<slug>]" or has the same title is the episode already uploaded. If the list cannot be read
+in full, Doubt is raised: nothing is uploaded.
+Quota / rate limits: an HTTP 429 or a quota 403 is NEVER retried (owner rule): Doubt is raised at once.
+Slots: Wednesday and Saturday 20:00 Europe/Kyiv (the zone's DST is handled by zoneinfo), at least 30 min ahead, one video a day.
 """
 import json
 import os
@@ -15,12 +15,12 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
-SCHEDULE = {"timezone": "Europe/Kyiv", "local_time": "20:00", "weekdays": [0, 4], "min_lead_minutes": 30}
-REF = "[ref: map-timelapse/{slug}]"
+SCHEDULE = {"timezone": "Europe/Kyiv", "local_time": "20:00", "weekdays": [2, 5], "min_lead_minutes": 30}
+REF = "[ref: stormatlasusa/{slug}]"
 
 
 class Doubt(RuntimeError):
-    """Not sure the channel was read in full or the token opens the right channel: no upload."""
+    """Not sure the channel was read in full, the token opens the right channel, or a rate limit was hit: no upload."""
 
 
 def _retry(fn, what, tries=4):
@@ -29,6 +29,10 @@ def _retry(fn, what, tries=4):
         try:
             return fn()
         except Exception as e:                                       # noqa: BLE001
+            st = getattr(getattr(e, "resp", None), "status", None)
+            txt = str(e)
+            if st == 429 or "quotaExceeded" in txt or "rateLimitExceeded" in txt or "uploadLimitExceeded" in txt:
+                raise Doubt(f"{what}: rate/quota limit ({st}), not retried: {txt[:160]}")
             last = e
             print(f"WARN {what} failed ({i + 1}/{tries}): {str(e)[:160]}")
             time.sleep(2 * 3 ** i)
@@ -115,7 +119,7 @@ def scheduled_ahead(videos, now=None):
 
 
 def next_slot(taken=(), now=None, cfg=SCHEDULE):
-    """The nearest free Mon/Fri 20:00 Kyiv slot, as an aware UTC datetime."""
+    """The nearest free Wed/Sat 20:00 Kyiv slot, as an aware UTC datetime."""
     tz = ZoneInfo(cfg["timezone"])
     now = now or datetime.now(timezone.utc)
     hh, mm = (int(x) for x in cfg["local_time"].split(":"))
@@ -131,7 +135,7 @@ def next_slot(taken=(), now=None, cfg=SCHEDULE):
 
 
 def plain_description(text, limit=5000):
-    """owner 21.11: the channel has no advanced features, so no links: every source as plain text without
+    """owner 23.11: new channel, no links: every source as plain text without
     http(s)://, no angle brackets, at most 5000 bytes."""
     import re
     text = re.sub(r"https?://", "", str(text or "")).replace("<", "").replace(">", "")

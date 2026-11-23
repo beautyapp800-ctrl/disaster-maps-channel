@@ -8,7 +8,7 @@ The engine was copied from America Over Time (map-timelapse). map-timelapse itse
 
 | # | Name | Handle | Why |
 |---|------|--------|-----|
-| A | **Every Disaster Mapped** | @EveryDisasterMapped | Matches the "Every X Mapped" title format. It is also the most common search phrase ("every tornado", "every hurricane"). |
+| A | ~~Every Disaster Mapped~~ → **Storm Atlas USA** (channel created 23.11) | @StormAtlasUSA | Matches the "Every X Mapped" title format. It is also the most common search phrase ("every tornado", "every hurricane"). |
 | B | **Natural Fury Mapped** | @NaturalFuryMapped | More emotional and easy to remember. It is less tied to the title format. |
 | C | **Disasters Mapped** | @DisastersMapped | Short, and still readable on a 40 px avatar. |
 

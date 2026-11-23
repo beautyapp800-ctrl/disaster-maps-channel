@@ -130,7 +130,16 @@
    "joplin": "weather.gov/news/052212-joplin + NWS Central Region service assessment (Joplin EF5)",
    "moore13": "weather.gov/oun/events-20130520 (Newcastle-Moore EF5)",
    "mayfield": "weather.gov/pah/december-10th-11th-2021-tornado (Mayfield EF4)",
-   "ruskin": "weather.gov/eax/RuskinHeights (Ruskin Heights F5, May 20, 1957; began near Williamsburg KS). Replaced Udall 1955: NWS confirms Udall, but the SPC straight path line passes 25 km from the town, so the close-up would be wrong."
+   "ruskin": "weather.gov/eax/RuskinHeights (Ruskin Heights F5, May 20, 1957; began near Williamsburg KS). Replaced Udall 1955: NWS confirms Udall, but the SPC straight path line passes 25 km from the town, so the close-up would be wrong.",
+   "dunlap1965": "weather.gov/iwx/1965_palmsunday_50 + weather.gov/ind/palmsuntor (Palm Sunday 1965, Dunlap IN tornadoes, F4)",
+   "lubbock1970": "weather.gov/lub/events-1970-19700511 (Lubbock tornado, May 11 1970, F5)",
+   "wichitafalls1979": "weather.gov/oun/events-19790410 (Wichita Falls tornado, April 10 1979, F4)",
+   "plainfield1990": "weather.gov/lot/1990_08_28_PlainfieldTornado (Plainfield F5, Aug 28 1990)",
+   "jarrell1997": "weather.gov/ewx/wxevent-19970527 (Jarrell F5, Double Creek Estates, May 27 1997)",
+   "jacksontn2003": "weather.gov/media/meg/research/Final_Paper.pdf + NWS service assessment record-may.pdf (Jackson TN F4, May 4 2003)",
+   "vilonia2014": "weather.gov/lzk/svr0414c.htm (Mayflower-Vilonia EF4, April 27 2014)",
+   "rollingfork2023": "weather.gov/jan/local_weather_events (Rolling Fork/Silver City EF4, March 24 2023)",
+   "short_zoom_rule": "Short zooms (owner 23.11): numbers on the card come from the SPC row; the close-up path is placed through the town named on the card."
   },
   "blue_marble": {
    "title": "Blue Marble Next Generation (GIBS layer BlueMarble_NextGeneration)",
@@ -190,6 +199,16 @@
   "harvey2017": "nhc.noaa.gov/data/tcr/AL092017_Harvey.pdf (landfall on San Jose Island 5 n mi east of Rockport TX; worst damage at Rockport)",
   "michael2018": "nhc.noaa.gov/data/tcr/AL142018_Michael.pdf (landfall near Mexico Beach and Tyndall AFB FL)",
   "ian2022": "nhc.noaa.gov/data/tcr/AL092022_Ian.pdf (landfall at Cayo Costa FL; 10-15 ft surge at Fort Myers Beach)",
-  "helene2024": "nhc.noaa.gov/data/tcr/AL092024_Helene.pdf + weather.gov/tae/helene2024 (landfall just east of the Aucilla River mouth; surge destroyed ~80% of buildings in Keaton Beach and Steinhatchee)"
+  "helene2024": "nhc.noaa.gov/data/tcr/AL092024_Helene.pdf + weather.gov/tae/helene2024 (landfall just east of the Aucilla River mouth; surge destroyed ~80% of buildings in Keaton Beach and Steinhatchee)",
+  "indianola1886": "weather.gov/hgx/hurricanes_climatology_1880s (Aug 20 1886 hurricane destroyed Indianola TX; post office closed 1887)",
+  "seaislands1893": "weather.gov/chs/tchistory (Sea Islands hurricane, landfall south of Savannah; 110 mph gusts and surge at Beaufort SC)",
+  "corpus1919": "weather.gov/crp/hurricane1919 (1919 hurricane, Corpus Christi)",
+  "miami1926": "weather.gov/mfl/miami_hurricane + weather.gov/news/260915-great-miami-hurricane (Great Miami Hurricane, landfall near Miami)",
+  "hazel1954": "weather.gov/ilm/HurricaneHazel1954 (landfall near Calabash NC, 18 ft surge at Calabash)",
+  "carla1961": "weather.gov/lch/1961Carla + weather.gov/hgx/hurricanes_climatology_1960s (landfall Port O'Connor / Port Lavaca TX)",
+  "eloise1975": "weather.gov/mob/Eloise (landfall between Fort Walton Beach and Panama City; Panama City Beach strip destroyed)",
+  "hugo1989": "weather.gov/chs/Hurricanehugo-Sep1989 (landfall at Sullivan's Island, just north of Charleston SC)",
+  "charley2004": "nhc.noaa.gov/data/tcr/AL032004_Charley.pdf (landfall near Cayo Costa; eyewall struck Punta Gorda)",
+  "ike2008": "nhc.noaa.gov/data/tcr/AL092008_Ike.pdf (landfall Galveston Island; highest surge on the Bolivar Peninsula)"
  }
 }

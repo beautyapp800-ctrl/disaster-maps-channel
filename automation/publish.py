@@ -1,13 +1,14 @@
-"""Upload the next reserve video(s) of America Over Time as PRIVATE videos with publishAt (Mon/Fri 20:00 Kyiv).
+"""Upload the next reserve video(s) of Storm Atlas USA as PRIVATE videos with publishAt (Wed and Sat 20:00 Kyiv).
 
 Run by .github/workflows/upload.yml (daily). Safe by design:
   - no token                      -> nothing happens (exit 0)
-  - wrong channel / empty YT_CHANNEL_ID / channel list not read in full (Doubt) -> nothing uploaded, exit 3
-  - the episode is already on the channel (marker "[ref: map-timelapse/<slug>]" or same title) -> never uploaded again
+  - music Content ID test not clear (state/contentid.json) -> nothing is uploaded (exit 0)
+  - wrong channel / empty YT_CHANNEL_ID / channel list not read in full / rate limit (Doubt) -> nothing uploaded, exit 3
+  - the episode is already on the channel (marker "[ref: stormatlasusa/<slug>]" or same title) -> never uploaded again
+  - one video per slot, slots are Wed/Sat 20:00 Europe/Kyiv, at least 30 min ahead
   - the state file (state/episodes.json) is committed right after every upload; if that fails the run stops
-Reserve = DRAFT release `reserve-<slug>` (title starts with RESERVE:), made by video.yml.
+Reserve = DRAFT release `reserve-<slug>` (title starts with RESERVE), made by pilot.yml: final.mp4, cover.jpg, meta.json.
 """
-import importlib
 import json
 import os
 import subprocess
@@ -17,11 +18,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from automation import meta, youtube  # noqa: E402
+from automation import youtube  # noqa: E402
+from disasters import meta as vmeta  # noqa: E402
 
-BUFFER = int(os.environ.get("AOT_BUFFER", "2"))        # videos kept scheduled ahead
+BUFFER = int(os.environ.get("SA_BUFFER", "2"))          # videos kept scheduled ahead
 MAX_PER_RUN = 2
 STATE = ROOT / "state" / "episodes.json"
+CONTENTID = ROOT / "state" / "contentid.json"
 QUEUE = ROOT / "data" / "topic_queue.json"
 DRY = os.environ.get("DRY_RUN", "") == "1"
 
@@ -39,8 +42,8 @@ def persist(state, msg):
     STATE.write_text(json.dumps(state, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     if DRY:
         return
-    sh("git", "config", "user.name", "aot-bot")
-    sh("git", "config", "user.email", "aot-bot@users.noreply.github.com")
+    sh("git", "config", "user.name", "atlas-bot")
+    sh("git", "config", "user.email", "atlas-bot@users.noreply.github.com")
     sh("git", "add", "state/episodes.json")
     sh("git", "commit", "-m", msg)
     for _ in range(3):
@@ -61,16 +64,28 @@ def _state_ahead(state):
     return sum(1 for e in state if e.get("publish_at") and datetime.fromisoformat(e["publish_at"].replace("Z", "+00:00")) > now)
 
 
+def music_clear():
+    """owner rule: every music track went through a test private upload and a Content ID check before the first publication"""
+    if not CONTENTID.exists():
+        return False, "no Content ID test yet (state/contentid.json missing)"
+    c = json.loads(CONTENTID.read_text(encoding="utf-8"))
+    tracks = json.loads((ROOT / "data" / "music" / "tracks.json").read_text(encoding="utf-8"))["tracks"]
+    bad = [t["id"] for t in tracks if c.get("tracks", {}).get(t["id"], {}).get("verdict") != "clear"]
+    return (not bad), ("tracks not clear: " + ", ".join(bad)) if bad else "all clear"
+
+
 def candidates():
     q = json.loads(QUEUE.read_text(encoding="utf-8"))["topics"]
-    ready = [t for t in q if t.get("module") and t["status"] in ("approved", "reserve", "zero")]
-    ready.sort(key=lambda t: t.get("order", 999))
-    return ready
+    return [t for t in q if not t["engine"].startswith("engine_pending")]
 
 
 def main():
     if not os.environ.get("YT_TOKEN_JSON", "").strip():
-        print("no YT_TOKEN_JSON: nothing to do (the owner has not stored the token yet)")
+        print("no YT_TOKEN_JSON: nothing to do (the token is not stored yet)")
+        return 0
+    ok, why = music_clear()
+    if not ok:
+        print(f"music Content ID gate: {why} - nothing uploaded")
         return 0
     yt = youtube.service()
     try:
@@ -90,11 +105,18 @@ def main():
         ahead = max(youtube.scheduled_ahead(videos), _state_ahead(state)) + len(sim_taken)
         if ahead >= BUFFER or done >= MAX_PER_RUN:
             break
-        slug = t["id"]
+        slug = t["slug"]
         if slug not in rel:
             continue
-        topic = importlib.import_module("mapviz.topics." + t["module"].replace("-", "_"))
-        title, desc, tags = meta.build(topic, slug)
+        work = ROOT / "out" / "upload" / slug
+        work.mkdir(parents=True, exist_ok=True)
+        sh("gh", "release", "download", f"reserve-{slug}", "-p", "meta.json", "-p", "cover.jpg", "-D", str(work), "--clobber")
+        m = json.loads((work / "meta.json").read_text(encoding="utf-8"))
+        pr = vmeta.problems(m)
+        if pr or f"[ref: {vmeta.CHANNEL_REF}/{slug}]" not in m["description"]:
+            print(f"{slug}: metadata problems {pr}: skipped")
+            continue
+        title, desc, tags = m["title"], m["description"], m["tags"]
         ex = youtube.find_existing(videos, slug, title)
         if ex:
             print(f"{slug}: already on the channel as {ex['id']} - not uploading again")
@@ -102,7 +124,6 @@ def main():
                 state.append(dict(slug=slug, title=title, status="scheduled", youtube_id=ex["id"], publish_at=ex["publish_at"]))
                 persist(state, f"state: {slug} found on the channel ({ex['id']})")
             continue
-        # taken slots: the channel's list + our state file (a fresh upload can lag in the API) + simulated dry-run uploads
         taken = list(youtube.channel_dates(videos)) + [e["publish_at"] for e in state if e.get("publish_at")] + sim_taken
         slot = youtube.next_slot(taken)
         print(f"{slug}: slot {slot.isoformat()}")
@@ -111,22 +132,15 @@ def main():
             sim_taken.append(slot.strftime("%Y-%m-%dT%H:%M:%SZ"))
             done += 1
             continue
-        work = ROOT / "out" / "upload" / slug
-        work.mkdir(parents=True, exist_ok=True)
-        sh("gh", "release", "download", f"reserve-{slug}", "-p", f"america-over-time_{slug}.mp4", "-D", str(work), "--clobber")
-        mp4 = work / f"america-over-time_{slug}.mp4"
-        vid = youtube.upload(yt, mp4, title, desc, tags, slot)
-        cover = ROOT / "assets" / "covers" / f"{slug}.jpg"
-        if cover.exists():
-            try:
-                youtube.set_thumbnail(yt, vid, cover)
-            except Exception as e:  # channel may lack custom-thumbnail rights (phone verification): never lose the state of an uploaded video
-                print("note: custom thumbnail skipped (channel not phone-verified yet); cover kept in assets/covers, set later by automation/set_covers.py")
-        else:
-            print(f"WARN: no cover {cover}")
+        sh("gh", "release", "download", f"reserve-{slug}", "-p", "final.mp4", "-D", str(work), "--clobber")
+        vid = youtube.upload(yt, work / "final.mp4", title, desc, tags, slot)
         state.append(dict(slug=slug, title=title, status="scheduled", youtube_id=vid, publish_at=slot.strftime("%Y-%m-%dT%H:%M:%SZ"),
                           uploaded_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
         persist(state, f"state: {slug} uploaded {vid}, publishAt {slot.isoformat()}")
+        try:
+            youtube.set_thumbnail(yt, vid, work / "cover.jpg")
+        except Exception as e:  # noqa: BLE001  (custom thumbnails need a phone-verified channel; never lose the state of an uploaded video)
+            print("note: custom thumbnail skipped:", str(e)[:120])
         sh("gh", "release", "edit", f"reserve-{slug}", "--title", f"UPLOADED {vid}: {slug}", check=False)
         videos = youtube.all_uploads(yt, [e["youtube_id"] for e in state if e.get("youtube_id")])
         done += 1

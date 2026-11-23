@@ -1,11 +1,11 @@
-"""Authorise the America Over Time channel once, by hand, and store the token as a GitHub secret.
+"""Authorise the Storm Atlas USA channel (@StormAtlasUSA) once, by hand, and store the token as a GitHub secret.
 
     pip install google-auth-oauthlib google-api-python-client
     python scripts/youtube_auth.py client_secret.json    # consent in the browser, pick the channel, shows its name and id
     python scripts/youtube_auth.py --check               # which channel the stored token opens
     python scripts/youtube_auth.py --store               # YT_TOKEN_JSON -> GitHub Secrets, and the channel id -> variable YT_CHANNEL_ID
 
-client_secret.json is the OAuth client (Desktop app) of Google Cloud project hypothetica-511509; it is git-ignored.
+client_secret.json is the OAuth client (Desktop app) of Google Cloud project gen-lang-client-0367233741; it is git-ignored.
 The token stays in youtube_token.json (git-ignored) and in the secret; it is never printed.
 """
 import json
@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from automation import youtube  # noqa: E402
 
-REPO = "edbackulin-eng/map-timelapse"
+REPO = "beautyapp800-ctrl/disaster-maps-channel"
 TOKEN_FILE = ROOT / "youtube_token.json"
 
 
@@ -45,8 +45,8 @@ def show():
 def main(argv):
     if "--store" in argv:
         ch = show()
-        if "america" not in ch["snippet"]["title"].lower():
-            print("This is NOT America Over Time - not stored.")
+        if "storm atlas" not in ch["snippet"]["title"].lower():
+            print("This is NOT Storm Atlas USA - not stored.")
             return 1
         subprocess.run(["gh", "secret", "set", "YT_TOKEN_JSON", "--repo", REPO], input=TOKEN_FILE.read_text(encoding="utf-8"),
                        text=True, check=True)
@@ -58,7 +58,7 @@ def main(argv):
         return 0
     authorize(Path(argv[0]))
     show()
-    print("If this is America Over Time:  python scripts/youtube_auth.py --store")
+    print("If this is Storm Atlas USA:  python scripts/youtube_auth.py --store")
     return 0
 
 

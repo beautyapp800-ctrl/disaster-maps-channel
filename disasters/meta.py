@@ -7,7 +7,7 @@ import sys
 
 from .tornado import Data, fmt
 
-CHANNEL_REF = "everydisastermapped"
+CHANNEL_REF = "stormatlasusa"
 
 
 def tornado_us(slug):
