@@ -194,6 +194,44 @@ def dem(keys, km=8.0, n=512):
         print(key, "dem", float(z.min()), float(z.max()), flush=True)
 
 
+STATES = {"ca": dict(center=(-119.6, 37.3), km=1600.0, n=6144, deg=0.0026), "fl": dict(center=(-83.3, 28.2), km=1100.0, n=4096, deg=0.0022)}
+
+
+def state_window(name):
+    """High-resolution ground for a state film: NLCD colours + 3DEP hillshade in a square world-axis window (RGBA; alpha 0 outside the US)."""
+    cfg = STATES[name]
+    out = ROOT / "data" / "world"
+    cx, cz = (float(v) for v in core.FR.world(*cfg["center"]))
+    size_w, n = cfg["km"] / core.KM_PER_UNIT, cfg["n"]
+    g = np.linspace(-0.5, 0.5, 9)
+    X, Z = np.meshgrid(cx + g * size_w, cz + g * size_w)
+    lon, lat = albers_inv((((X / core.WORLD_W + 0.5) * core.TW) - core.TW / 2) / core.FR.s + core.FR.cx,
+                          core.FR.cy - (((Z / core.WORLD_H + 0.5) * core.TH) - core.TH / 2) / core.FR.s)
+    b = (float(lon.min()) - 0.1, float(lat.min()) - 0.1, float(lon.max()) + 0.1, float(lat.max()) + 0.1)
+    print(name, "bbox", b, flush=True)
+    cls, geo_c = wms_mosaic(*b, cfg["deg"])
+    hs, geo_h = dep_mosaic(*b, cfg["deg"])
+    from disasters.mini import NAT_PAL, _lut
+    lut = _lut(NAT_PAL)
+    rgba = np.zeros((n, n, 4), np.uint8)
+    step = 256
+    for y0 in range(0, n, step):
+        gx = (np.arange(n) + 0.5) / n - 0.5
+        gz = (np.arange(y0, min(n, y0 + step)) + 0.5) / n - 0.5
+        XX, ZZ = np.meshgrid(cx + gx * size_w, cz + gz * size_w)
+        la_, lo_ = None, None
+        lon, lat = albers_inv((((XX / core.WORLD_W + 0.5) * core.TW) - core.TW / 2) / core.FR.s + core.FR.cx,
+                              core.FR.cy - (((ZZ / core.WORLD_H + 0.5) * core.TH) - core.TH / 2) / core.FR.s)
+        c = sample(cls, geo_c, lon, lat, True)
+        h = sample(hs, geo_h, lon, lat, False).astype(np.float32) / 180.0
+        col = lut[c] * np.clip(1.0 + (h - 1.0)[..., None] * 0.85, 0.55, 1.28)
+        rgba[y0:y0 + len(gz), :, :3] = np.clip(col, 0, 255).astype(np.uint8)
+        rgba[y0:y0 + len(gz), :, 3] = np.where(c > 0, 255, 0)
+        print("  rows", y0, flush=True)
+    Image.fromarray(rgba, "RGBA").save(out / f"state_{name}.png", optimize=False, compress_level=6)
+    (out / f"state_{name}.json").write_text(json.dumps(dict(cx=cx, cz=cz, size=size_w, n=n, km=cfg["km"])))
+
+
 def region(keys):
     out = ROOT / "data" / "region"
     out.mkdir(parents=True, exist_ok=True)
@@ -329,6 +367,9 @@ if __name__ == "__main__":
     keys = [a for a in args if a in TOWNS or a in HTOWNS or a in Q_KEYS] or list(TOWNS)
     if "hurricanes" in args:
         keys = HTOWNS
+    if "state" in args:
+        state_window(next(a for a in args if a in STATES))
+        sys.exit(0)
     if "quakes" in args:
         keys = list(Q_KEYS)
     if "shorts" in args:

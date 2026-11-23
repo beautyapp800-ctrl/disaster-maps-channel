@@ -47,8 +47,10 @@ if len(files) < 3:
     files = ["assets/music/oga-first-light-particles.mp3", "assets/music/oga-november-snow.mp3"] * 2
 sfx = out_dir / "sfx.wav"
 import os
-HUR = os.environ.get("ENGINE") == "hurricane"
-sh(sys.executable, "-m", "disasters.hsound" if HUR else "disasters.sound", str(sfx))
+ENG = os.environ.get("ENGINE", "tornado")
+SND = {"tornado": "disasters.sound", "hurricane": "disasters.hsound", "earthquake": "disasters.qsound"}[ENG]
+QAM = {"tornado": "disasters.qa", "hurricane": "disasters.hqa", "earthquake": "disasters.qqa"}[ENG]
+sh(sys.executable, "-m", SND, str(sfx))
 mix = out_dir / "mix.wav"
 ins = []
 for f in files:
@@ -93,7 +95,7 @@ if abs(D - exp_s) > 0.6:
     fails.append(f"duration {D:.2f}s, expected {exp_s:.2f}s")
 
 # ---- frame QA (pre-encode, 1 s grid) + data sync, independent of the renderer
-rc = subprocess.run([sys.executable, "-m", "disasters.hqa" if HUR else "disasters.qa", str(seg_dir), str(out_dir / "qa_report.md")]).returncode
+rc = subprocess.run([sys.executable, "-m", QAM, str(seg_dir), str(out_dir / "qa_report.md")]).returncode
 if rc:
     fails.append("frame QA failed (see qa_report.md)")
 

@@ -9,6 +9,7 @@ on:
       slug: {type: string, default: ""}
       store: {type: string, default: "false"}
       tag: {type: string, default: ""}
+      topic: {type: string, default: ""}
       res: {type: string, default: "2160"}
       texw: {type: string, default: "4096"}
       segments: {type: string, default: "24"}
@@ -16,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       engine:
-        description: "tornado or hurricane"
+        description: "tornado, hurricane or earthquake"
         default: "tornado"
       slug:
         description: "topic slug (needed when store=true)"
@@ -26,6 +27,9 @@ on:
         default: "false"
       tag:
         description: "version tag shown in the run name (the chain looks for it)"
+        default: ""
+      topic:
+        description: "hurricane topic: us | major | florida (empty = the default topic of the engine)"
         default: ""
       res:
         description: "video height (2160 = 4K, 1080, 360 = smoke test)"
@@ -53,12 +57,13 @@ jobs:
         run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
       - name: NOAA SPC tornado database 1950-2025 (public domain)
-        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/hurdat2.txt https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt
+        run: bash scripts/fetch_raw.sh
       - name: Three covers, automatic choice
         env:
           RES: "1440"
-          TEXW: "4096"
-        run: python -m ${{ inputs.engine == 'hurricane' && 'disasters.hcovers' || 'disasters.covers' }} out/covers
+          TEXW: ${{ inputs.texw }}
+          TOPIC: ${{ inputs.topic }}
+        run: python -m ${{ fromJSON('{"tornado":"disasters.covers","hurricane":"disasters.hcovers","earthquake":"disasters.qcovers"}')[inputs.engine] }} out/covers
       - uses: actions/upload-artifact@v4
         with:
           name: covers
@@ -77,7 +82,7 @@ jobs:
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 12
       matrix:
         seg: ${{ fromJson(needs.plan.outputs.matrix) }}
     steps:
@@ -89,12 +94,13 @@ jobs:
         run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
       - name: NOAA SPC tornado database 1950-2025 (public domain)
-        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/hurdat2.txt https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt
+        run: bash scripts/fetch_raw.sh
       - name: Render segment
         env:
           RES: ${{ inputs.res }}
           TEXW: ${{ inputs.texw }}
-        run: python -m ${{ inputs.engine == 'hurricane' && 'disasters.hurricane_render' || 'disasters.renderer' }} --seg ${{ matrix.seg }} --of ${{ inputs.segments }} --out out/seg --crf ${{ inputs.crf }}
+          TOPIC: ${{ inputs.topic }}
+        run: python -m ${{ fromJSON('{"tornado":"disasters.renderer","hurricane":"disasters.hurricane_render","earthquake":"disasters.quake_render"}')[inputs.engine] }} --seg ${{ matrix.seg }} --of ${{ inputs.segments }} --out out/seg --crf ${{ inputs.crf }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -112,7 +118,7 @@ jobs:
       - run: pip install numpy pillow pyshp shapely
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
       - name: NOAA SPC tornado database (for the independent QA)
-        run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/hurdat2.txt https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt
+        run: bash scripts/fetch_raw.sh
       - uses: actions/download-artifact@v4
         with:
           pattern: seg-*
@@ -120,6 +126,7 @@ jobs:
       - name: Assemble, music -14 LUFS, verify, QA
         run: |
           export ENGINE=${{ inputs.engine }}
+          export TOPIC=${{ inputs.topic }}
           EXP=$(python3 scripts/total_seconds.py)
           python scripts/assemble.py segs out/final $EXP ${{ inputs.res }}
       - uses: actions/upload-artifact@v4
@@ -148,7 +155,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - run: pip install numpy pillow pyshp shapely
-      - run: mkdir -p data/raw && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/tornadoes.csv https://www.spc.noaa.gov/wcm/data/1950-2025_actual_tornadoes.csv && curl -sfL --retry 3 -A "Mozilla/5.0" -o data/raw/hurdat2.txt https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt
+      - run: bash scripts/fetch_raw.sh
       - uses: actions/download-artifact@v4
         with: {name: final-video, path: dl/video}
       - uses: actions/download-artifact@v4

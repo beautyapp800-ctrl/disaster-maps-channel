@@ -6,6 +6,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import os
 if os.environ.get("ENGINE") == "hurricane":
     from disasters.hurricane import FPS, Data, Timeline
+elif os.environ.get("ENGINE") == "earthquake":
+    from disasters.quake import FPS, Data, Timeline
 else:
     from disasters.tornado import FPS, Data, Timeline
 

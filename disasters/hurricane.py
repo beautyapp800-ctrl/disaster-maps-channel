@@ -7,6 +7,7 @@ Category = Saffir-Simpson category of the maximum sustained wind at that US land
 from __future__ import annotations
 
 import math
+import os
 from bisect import bisect_right
 from functools import lru_cache
 
@@ -15,6 +16,10 @@ import numpy as np
 from .core import ROOT
 
 FPS = 24
+TOPIC = os.environ.get("TOPIC") or "us"          # us | major (Cat 3+ at landfall) | florida (hurricane landfalls in Florida)
+TOPIC_TITLE = {"us": "EVERY HURRICANE THAT HIT AMERICA, MAPPED", "major": "EVERY MAJOR HURRICANE TO HIT AMERICA, MAPPED",
+               "florida": "EVERY HURRICANE TO HIT FLORIDA, MAPPED"}[TOPIC]
+TOPIC_CENTER = {"us": None, "major": None, "florida": (-83.4, 28.0)}[TOPIC]
 Y0, Y1 = 1851, 2025
 YEAR_S = 1.7            # seconds of video per year
 EV_S = 22.0             # famous landfall stop (national -> regional -> town -> storm close-up -> back)
@@ -138,6 +143,16 @@ class Data:
                 for a in ("t", "lat", "lon", "wind"):
                     setattr(s, a, np.array(getattr(s, a)))
                 hit.append(s)
+        if TOPIC == "major":
+            hit = [s for s in hit if s.cat >= 3]
+        elif TOPIC == "florida":
+            keep = []
+            for s in hit:
+                s.landfalls = [k for k in s.landfalls if landfall_state(s.lon[k], s.lat[k]) == "FL"]
+                if s.landfalls:
+                    s.cat = max(category(s.wind[k]) for k in s.landfalls)
+                    keep.append(s)
+            hit = keep
         self.storms = sorted(hit, key=lambda s: s.t[s.landfalls[0]])
         self.n = len(self.storms)
         self.cat = np.array([s.cat for s in self.storms])
@@ -149,6 +164,10 @@ class Data:
             c = [i for i, s in enumerate(self.storms) if s.year == year and (s.sid == name if name.startswith("AL") else s.name == name)]
             if name == "UNNAMED" and len(c) > 1:
                 c = sorted(c, key=lambda i: -self.storms[i].cat)
+            if not c and TOPIC != "us":
+                continue                      # this storm is not part of the topic
+            if TOPIC == "florida" and landfall_state(town[1], town[0]) != "FL":
+                continue
             if not c:
                 raise ValueError(f"event {key} not found in HURDAT2 landfalls")
             i = c[0]
@@ -301,7 +320,8 @@ class Timeline:
             (self.year_t0[1880] + 0.3, "BEFORE SATELLITES, TRACKS COME FROM SHIP LOGS AND COASTAL REPORTS"),
             (self.year_t0[busiest] + 0.3, f"{busiest}: {per_year[busiest]} HURRICANES CAME ASHORE, THE MOST OF ANY YEAR ON THIS MAP"),
             (self.year_t0[1966] + 0.3, "THE 1960S: WEATHER SATELLITES START WATCHING EVERY STORM"),
-            (self.year_t0[2000] + 0.3, f"ONLY {len(five)} HURRICANES HIT THE MAINLAND AT CATEGORY 5"),
+            (self.year_t0[2000] + 0.3, (f"ONLY {len(five)} HURRICANES HIT FLORIDA AT CATEGORY 5" if TOPIC == "florida"
+                                       else f"ONLY {len(five)} HURRICANES HIT THE MAINLAND AT CATEGORY 5")),
         ]
         decs = []
         for d0 in range(1860, 2030, 20):

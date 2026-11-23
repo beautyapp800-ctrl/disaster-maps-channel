@@ -585,6 +585,7 @@ class StateLabels:
                 d.text((xx, box[1] + 6 * K), ch, font=f, fill=(255, 255, 255, al), stroke_width=max(2, int(2.6 * K)), stroke_fill=(18, 22, 40, int(al * 0.85)))
                 xx += d.textlength(ch, font=f) + track
             shown.append(text)
+        self.last_boxes = placed[len(avoid):]
         if shown:
             img.paste(lay.convert("RGB"), (0, 0), lay.getchannel("A"))
         return shown

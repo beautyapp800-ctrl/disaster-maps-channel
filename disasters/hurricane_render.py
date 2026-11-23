@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from . import core
 from .core import FR, ROOT, TH, TW, Cam, font, lerp_cam, smooth, world3
-from .hurricane import (BARS_S, CAT_COL, CAT_W, EV_HIT, EV_RUN, EV_S, FPS, HEAT_S, INTRO_S, MONTHS, Y0, Y1, Data, Timeline, category, fmt)
+from .hurricane import (TOPIC, TOPIC_CENTER, TOPIC_TITLE, BARS_S, CAT_COL, CAT_W, EV_HIT, EV_RUN, EV_S, FPS, HEAT_S, INTRO_S, MONTHS, Y0, Y1, Data, Timeline, category, fmt)
 from .renderer import H, K, W, WHITE, WS, YEL, Hud, borders_overlay, lighten, pixel_qa, state_centroids
 from .tornado import STATE_NAMES
 
@@ -184,6 +184,12 @@ class Director:
         TL = self.TL
         k = [(0.0, 40, -10, 3.4, 0.35, 0.55), (12.0, 48, 6, 3.3, 0.45, 0.50), (INTRO_S, 54, 0, 3.0, 0.45, 0.40)]
         pat = [(52, -8, 3.1, 0.40, 0.42), (58, 8, 2.9, 0.55, 0.45), (50, -4, 3.0, 0.35, 0.40), (56, 6, 2.95, 0.50, 0.38)]
+        if TOPIC_CENTER:
+            c = world3(*TOPIC_CENTER)
+            cx, cz = float(c[0]), float(c[2])
+            k = [(0.0, 48, -10, 1.7, cx + 0.05, cz), (12.0, 52, 6, 1.6, cx, cz), (INTRO_S, 54, 0, 1.55, cx, cz)]
+            pat = [(52, -8, 1.55, cx + 0.04, cz), (58, 8, 1.45, cx - 0.04, cz + 0.03), (50, -4, 1.6, cx, cz - 0.03), (56, 6, 1.5, cx + 0.03, cz + 0.02)]
+            pat = [(a, b, d, x, z) for a, b, d, x, z in pat]
         t, j = INTRO_S + 14.0, 0
         while t < TL.main_end - 6:
             k.append((t, *pat[j % len(pat)]))
@@ -296,7 +302,7 @@ class Renderer:
         self.TL = Timeline(self.D)
         self.painter = Painter(self.D, self.TL)
         self.dir = Director(self.D, self.TL)
-        self.scene = scene or MiniScene(W, H)
+        self.scene = scene or MiniScene(W, H, state="fl" if TOPIC == "florida" else None)
         from .renderer import StateLabels
         self.states = StateLabels()
         cent = state_centroids()
@@ -408,7 +414,7 @@ class Renderer:
             legend(H_, img, cats, "B")
             if t > INTRO_S - 8.0:
                 a = min(1.0, (t - (INTRO_S - 8.0)) / 0.8) * (1 - smooth((t - (INTRO_S - 1.0)) / 1.0))
-                H_.card(img, [("EVERY HURRICANE THAT HIT AMERICA, MAPPED", 78, YEL), (f"{fmt(D.n)} HURRICANES  ·  {Y0}-{Y1}", 56, WHITE)], a, "TITLE")
+                H_.card(img, [(TOPIC_TITLE, 78, YEL), (f"{fmt(D.n)} HURRICANES  ·  {Y0}-{Y1}", 56, WHITE)], a, "TITLE")
             meta.update(count=0, major=0)
         elif mode == "main":
             dt = TL.dt_at(t)
@@ -438,6 +444,19 @@ class Renderer:
             cap, al = TL.caption_at(t)
             if cap:
                 H_.caption(img, cap, al)
+        elif mode == "bars" and TOPIC == "florida":
+            top = sorted(range(D.n), key=lambda i: (-max(D.storms[i].wind[k] for k in D.storms[i].landfalls), D.tl[i]))[:8]
+            H_.panel_main(img, "TOP 8", "", [("HURRICANES ASHORE", fmt(D.n))], "A")
+            rows = []
+            for i in top:
+                s = D.storms[i]
+                kt = int(max(s.wind[k] for k in s.landfalls))
+                nm = s.name.title() if s.name != "UNNAMED" else "Unnamed"
+                rows.append((CAT_COL[max(1, category(kt))], f"{s.year} {nm}  {kt} KT"[:32], ""))
+            H_.panel_list(img, "STRONGEST LANDFALLS IN FLORIDA", rows, "B")
+            cap, al = TL.caption_at(t)
+            if cap:
+                H_.caption(img, cap, al)
         elif mode == "bars":
             H_.panel_main(img, "STATES", "", [("HURRICANES ASHORE", fmt(D.n))], "A")
             mx = max(self.bar_counts.values())
@@ -452,7 +471,7 @@ class Renderer:
             meta.update(count=D.n)
             a = smooth((t - ph["t0"] - 4.0) / 1.0)
             if a > 0:
-                H_.card(img, [("EVERY HURRICANE THAT HIT AMERICA, MAPPED", 70, YEL),
+                H_.card(img, [(TOPIC_TITLE, 70, YEL),
                               ("DATA: NOAA NATIONAL HURRICANE CENTER HURDAT2, 1851-2025", 36, WHITE),
                               ("MAP: USGS NLCD, 3DEP · NASA BLUE MARBLE · TOWNS: (C) OPENSTREETMAP CONTRIBUTORS, TODAY'S STREETS IN ILLUSTRATIVE 3D", 28, (200, 215, 240))], a, "END")
         meta["panels"] = H_.items

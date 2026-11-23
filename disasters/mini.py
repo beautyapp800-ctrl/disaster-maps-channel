@@ -628,6 +628,7 @@ uniform float tm; uniform vec3 eye; uniform float camdist; uniform float mpu;
 uniform sampler2D noise;
 uniform float shadow_on; uniform mat4 lmvp; uniform sampler2DShadow smap; uniform float sbias; uniform float stex;
 uniform vec4 storm;   // x, z (same frame as vp), radius, strength
+uniform vec2 qk; uniform vec4 qr;   // earthquake: epicentre (x, z), (damage radius, wave speed, seconds since start, alpha)
 uniform sampler2D dem; uniform float demsize; uniform float surge;   // storm surge: water level (m) over USGS 3DEP ground (m)
 float demAt(vec2 lxz){
   vec2 uv = lxz/demsize + 0.5;
@@ -671,6 +672,7 @@ uniform vec3 box0; uniform vec3 box1; uniform vec3 box2; uniform vec3 box3; unif
 uniform sampler2D ovl; uniform float ovl_alpha; uniform float dim;
 uniform vec2 sa; uniform vec2 sb; uniform float shw; uniform float salong; uniform float swath_on; uniform vec3 O;
 uniform sampler2D outer; uniform float outer_on;
+uniform sampler2D stt; uniform vec3 sbox; uniform float son;
 in vec2 vt; in vec3 vn; in vec3 vp; in float ved; out vec4 c;
 vec4 lvl(sampler2D s, vec3 b, vec2 xz, out float w){
   vec2 uv = (xz - b.xy)/b.z + 0.5;
@@ -695,6 +697,12 @@ void main(){
   if (lvon.y > 0.5) { g2 = lvl(lv1, box1, lxz, w); g = mix(g, g2, w); }
   if (lvon.z > 0.5) { g2 = lvl(lv2, box2, lxz, w); g = mix(g, g2, w); }
   if (lvon.w > 0.5) { g2 = lvl(lv3, box3, lxz, w); g = mix(g, g2, w); }
+  if (son > 0.5) {
+    vec2 su = (vp.xz - sbox.xy)/sbox.z + 0.5;
+    float sw = smoothstep(0.0, 0.03, min(min(su.x, 1.0 - su.x), min(su.y, 1.0 - su.y)));
+    vec4 sc = texture(stt, clamp(su, 0.0, 1.0));
+    g = vec4(mix(g.rgb, sc.rgb, sc.a*sw*(1.0 - smoothstep(0.6, 1.4, camdist*0.0 + 0.0))), g.a);
+  }
   vec3 n = normalize(vn);
   vec3 lp = vec3(lxz.x, vp.y, lxz.y);
   float sh = shadowAt(lp, n);
@@ -745,6 +753,15 @@ void main(){
       col = mix(fc, vec3(0.92,0.93,0.90), foam*0.7);
     }
   }
+  if (qr.w > 0.0) {
+    float dq = length(lxz - qk);
+    float rr = qr.y*qr.z;
+    float wr = max(rr*0.05, 4.0/mpu);
+    float ring = exp(-pow((dq - rr)/wr, 2.0)) * (1.0 - smoothstep(2.0, 5.0, rr/max(qr.x, 1e-9)));
+    col = mix(col, vec3(1.0, 0.72, 0.30), ring*0.50*qr.w);
+    float inten = exp(-dq/max(qr.x, 1e-9));
+    col = mix(col, vec3(0.50, 0.42, 0.34), smoothstep(0.50, 0.90, inten)*smoothstep(1.5, 4.0, qr.z)*0.55*qr.w);
+  }
   vec4 o = texture(ovl, uv);
   col = mix(col, o.rgb, o.a*ovl_alpha*step(0.0, e));
   col *= 1.0 - 0.45*stormAt(lp);
@@ -764,6 +781,7 @@ void main(){ vec3 s = mix(vec3(0.78,0.88,0.98), vec3(0.36,0.62,0.93), smoothstep
 VS_BLD = """#version 330
 uniform mat4 mvp; uniform float yscale; uniform vec2 pa; uniform vec2 pb; uniform float hw; uniform float along; uniform float clen;
 uniform float wind; uniform float mpu;
+uniform vec2 qk; uniform vec4 qd;   // earthquake epicentre (x, z) and (damage radius, shake amplitude m, seconds since start, alpha)
 in vec3 p; in vec3 n; in vec2 wuv; in vec4 info; in vec3 bc;
 out vec3 vn; out vec2 vwuv; flat out vec4 vinfo; out vec3 vp; out float vdmg; out float vag; flat out float vlost;
 void main(){
@@ -774,10 +792,13 @@ void main(){
   float dmg = k*sev;
   float yl = p.y - bc.z;
   float hk = fract(sin(info.x*91.7)*437.5);
+  float qint = exp(-length(bc.xy - qk)/max(qd.x, 1e-9))*qd.w;
+  dmg = max(dmg, smoothstep(0.55, 0.92, qint*(0.60 + 0.75*hk))*smoothstep(1.0, 3.5, qd.z)*step(0.5, qd.w));
   float lost = (info.w > 0.5 && info.y < 1.5) ? step(hk, wind*0.42) : 0.0;
   if (lost > 0.5) yl = min(yl, info.z/mpu);
   vec3 q = vec3(p.x, bc.z*yscale + yl*mix(1.0, 0.10 + 0.25*hk, dmg), p.z);
   q.xz += (q.xz - bc.xy)*0.15*dmg + dir*yl*0.35*dmg*hk;
+  q.xz += vec2(sin(qd.z*33.0 + info.x*13.0), cos(qd.z*27.0 + info.x*7.0))*qd.y*qint*(0.4 + 0.6*clamp(yl*mpu/12.0, 0.0, 1.0))/mpu;
   vp = q; gl_Position = mvp*vec4(q, 1.0);
   vn = lost > 0.5 ? vec3(0.0, 1.0, 0.0) : n; vwuv = wuv; vinfo = info; vdmg = dmg; vag = (q.y - bc.z*yscale)*mpu; vlost = lost;
 }"""
@@ -1006,6 +1027,54 @@ void main(){
   c = vec4(C*alpha, A*alpha);
 }"""
 
+FS_DUST = """#version 330
+uniform float tm; uniform vec3 eye; uniform sampler2D noise; uniform vec3 cen; uniform float R; uniform float Hh;
+uniform float alpha; uniform float grow;
+in vec3 vp; out vec4 c;
+const vec3 SUN = vec3(-0.5845, 0.5632, 0.5845);
+float hsh(float x){ return fract(sin(x*127.1)*43758.5453); }
+float dens(vec3 q){
+  float h = q.y/Hh;
+  if (h < 0.0 || h > 1.0) return 0.0;
+  float d = 0.0;
+  for (int k = 0; k < 9; k++) {
+    float fk = float(k);
+    vec2 pc = (vec2(hsh(fk*1.7), hsh(fk*3.1 + 1.0)) - 0.5)*1.6*R;
+    float hgt = grow*(0.40 + 0.60*hsh(fk*5.3));
+    float w = R*(0.10 + 0.16*hsh(fk*7.7))*(0.7 + 1.3*h);
+    vec2 dd = q.xz - pc - vec2(sin(tm*0.6 + fk), cos(tm*0.5 + fk*2.0))*R*0.04*h;
+    float r = length(dd)/w;
+    float col = exp(-r*r)*(1.0 - smoothstep(hgt*0.65, hgt, h))*smoothstep(0.0, 0.05, h);
+    float n = texture(noise, dd/(R*0.7) + vec2(h*0.6 - tm*0.03, fk*0.31)).g;
+    d += col*(0.45 + n);
+  }
+  return d*0.8;
+}
+void main(){
+  vec3 ro = eye - cen; vec3 rd = normalize(vp - eye);
+  vec3 bmin = vec3(-R, 0.0, -R), bmax = vec3(R, Hh, R);
+  vec3 inv = 1.0/rd; vec3 t0 = (bmin - ro)*inv, t1 = (bmax - ro)*inv;
+  vec3 tmn = min(t0, t1), tmx = max(t0, t1);
+  float ta = max(max(tmn.x, tmn.y), max(tmn.z, 0.0)), tb = min(min(tmx.x, tmx.y), tmx.z);
+  if (tb <= ta) discard;
+  const int N = 48;
+  float dt = (tb - ta)/float(N);
+  float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)))*43758.5453);
+  vec3 C = vec3(0.0); float A = 0.0;
+  for (int i = 0; i < N; i++) {
+    vec3 q = ro + rd*(ta + (float(i) + jit)*dt);
+    float d = dens(q);
+    if (d < 0.01) continue;
+    float a = 1.0 - exp(-d*dt/Hh*7.0);
+    float occ = dens(q + SUN*Hh*0.15);
+    vec3 col = mix(vec3(0.50,0.41,0.31), vec3(0.80,0.73,0.63), clamp(q.y/Hh*1.2, 0.0, 1.0))*(0.62 + 0.45*exp(-occ*1.2));
+    C += (1.0 - A)*a*col; A += (1.0 - A)*a;
+    if (A > 0.97) break;
+  }
+  if (A < 0.004) discard;
+  c = vec4(C*alpha, A*alpha);
+}"""
+
 FS_HURR = """#version 330
 uniform float tm; uniform vec3 eye; uniform sampler2D noise; uniform vec3 cen; uniform float R; uniform float Hh;
 uniform float alpha; uniform float spin; uniform float eyer; uniform float seed;
@@ -1225,7 +1294,7 @@ def _b(m):
 class MiniScene:
     SHADOW = 4096
 
-    def __init__(self, W: int, H: int, msaa: int = 4):
+    def __init__(self, W: int, H: int, msaa: int = 4, state: str | None = None):
         import moderngl
         self.mgl = moderngl
         try:
@@ -1261,6 +1330,14 @@ class MiniScene:
         self.vao_ter = _vao(ctx, self.p_ter, [(self._tb, "3f 2f 3f 1f", "p", "t", "n", "ed")], self._ti)
         sw, sh = min(8192, TW * 2), min(4608, TH * 2)
         self.t_nat = self._tex(nation_image(sw, sh), mip=True)
+        self.t_state, self.sbox = None, (0.0, 0.0, 1.0)
+        if state:
+            sj = ROOT / "data" / "world" / f"state_{state}.json"
+            sp = ROOT / "data" / "world" / f"state_{state}.png"
+            if sj.exists() and sp.exists():
+                meta = json.loads(sj.read_text())
+                self.t_state = self._tex(Image.open(sp).convert("RGBA"), mip=True)
+                self.sbox = (meta["cx"], meta["cz"], meta["size"])
         oi = outer_image()
         self.t_outer = self._tex(oi, mip=True) if oi is not None else None
         self.t_noise = self._tex(noise_image(), mip=True, repeat=True)
@@ -1284,6 +1361,7 @@ class MiniScene:
         self.p_fun = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_FUN)
         self.p_cloudv = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_CLOUDV)
         self.p_hurr = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_HURR)
+        self.p_dust = ctx.program(vertex_shader=VS_FUN, fragment_shader=FS_DUST)
         self.p_border = ctx.program(vertex_shader=VS_BORDER, fragment_shader=FS_BORDER)
         bv = self._border_mesh()
         self.vao_border = ctx.vertex_array(self.p_border, [(ctx.buffer(bv.tobytes()), "3f 2f 1f", "p", "pr", "side")])
@@ -1303,6 +1381,7 @@ class MiniScene:
         self.vao_fun = ctx.vertex_array(self.p_fun, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
         self.vao_cloudv = ctx.vertex_array(self.p_cloudv, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
         self.vao_hurr = ctx.vertex_array(self.p_hurr, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
+        self.vao_dust = ctx.vertex_array(self.p_dust, [(ctx.buffer(cb.tobytes()), "3f", "p")], ctx.buffer(ci.tobytes()))
         sv, sf = _icosphere(2)
         self.p_puff = ctx.program(vertex_shader=VS_PUFF, fragment_shader=FS_PUFF)
         self.puff_vb = ctx.buffer(sv.tobytes())
@@ -1594,6 +1673,7 @@ class MiniScene:
         # terrain
         self.t_nat.use(0)
         (self.t_outer or self.t_dummy).use(11)
+        (self.t_state or self.t_dummy).use(13)
         self.t_ovl.use(5)
         self.t_noise.use(3)
         self.smap.use(6)
@@ -1617,7 +1697,14 @@ class MiniScene:
                 self.t_dummy.use(unit)
             _set(pt, f"lv{j}", unit)
             _set(pt, f"box{j}", tuple(float(v) for v in boxes[j]))
-        uni = dict(nat=0, ovl=5, smap=6, outer=11, outer_on=1.0 if self.t_outer is not None else 0.0, lvon=tuple(lvon), dim=float(dim), ovl_alpha=float(ovl_alpha), eye=tuple(float(v) for v in eye),
+        q = local.get("quake") if local else None
+        if q:
+            qk_l = (q["pos"][0] - O[0], q["pos"][1] - O[2])
+            qr = (float(q["R"]), float(q["speed"]), float(q["t"]), float(q["alpha"]))
+        else:
+            qk_l, qr = (0.0, 0.0), (1.0, 0.0, 0.0, 0.0)
+        uni = dict(stt=13, sbox=(float(self.sbox[0]), float(self.sbox[1]), float(self.sbox[2])), son=1.0 if self.t_state is not None else 0.0,
+                   qk=qk_l, qr=qr, nat=0, ovl=5, smap=6, outer=11, outer_on=1.0 if self.t_outer is not None else 0.0, lvon=tuple(lvon), dim=float(dim), ovl_alpha=float(ovl_alpha), eye=tuple(float(v) for v in eye),
                    O=tuple(float(v) for v in O), shadow_on=shadow_on, sbias=0.00008, stex=1.0 / self.SHADOW, storm=storm_l,
                    swath_on=1.0 if sw else 0.0, sa=tuple(float(v) for v in (local["pa"] if sw else (0, 0))), sb=tuple(float(v) for v in (local["pb"] if sw else (1, 0))),
                    shw=float(local["hw"]) if sw else 0.0, salong=float(local["along"]) if sw else 0.0, **common)
@@ -1627,7 +1714,8 @@ class MiniScene:
         self.vao_ter.render()
         # town geometry
         if R is not None and cam.dist < 0.08:
-            bu = dict(eye=tuple(float(v) for v in eye_l), shadow_on=shadow_on, sbias=0.00008, stex=1.0 / self.SHADOW, smap=6, storm=storm_l,
+            bu = dict(qk=qk_l, qd=(float(q["R"]), float(q["amp"]), float(q["t"]), float(q["alpha"])) if q else (1.0, 0.0, 0.0, 0.0),
+                      eye=tuple(float(v) for v in eye_l), shadow_on=shadow_on, sbias=0.00008, stex=1.0 / self.SHADOW, smap=6, storm=storm_l,
                       pa=pa_l, pb=pb_l, hw=float(local.get("hw", 0.0)), along=float(local.get("along", 0.0)), clen=float(local.get("clen", 1e-4)),
                       alpha=1.0, **common)
             for prog in (self.p_bld, self.p_tree):
@@ -1673,6 +1761,10 @@ class MiniScene:
             cl = local.get("cloud")
             if cl and cl["alpha"] > 0.01:
                 self._cloud(Ml, eye_l, c, cl, tm)
+        if local and local.get("dust") and local["dust"]["alpha"] > 0.01:
+            d_ = local["dust"]
+            c_ = np.array([d_["pos"][0], d_["pos"][1] * yscale, d_["pos"][2]]) - O
+            self._dust(Ml, eye_l, c_, d_, tm)
         if local and local.get("cloud") and not local.get("funnel") and local["cloud"]["alpha"] > 0.01:
             cp = local.get("cloud_pos", (O[0], 0.0, O[2]))
             c = np.array([cp[0], cp[1] * yscale, cp[2]]) - O
@@ -1743,6 +1835,25 @@ class MiniScene:
         ctx.disable(mgl.CULL_FACE)
         self.msaa.depth_mask = True
 
+    def _dust(self, M, eye, c, d, tm):
+        """rising dust plumes over the damaged blocks of an earthquake"""
+        ctx, mgl = self.ctx, self.mgl
+        ctx.blend_func = mgl.ONE, mgl.ONE_MINUS_SRC_ALPHA
+        self.msaa.depth_mask = False
+        ctx.enable(mgl.CULL_FACE)
+        ctx.cull_face = "front"
+        ctx.disable(mgl.DEPTH_TEST)
+        p = self.p_dust
+        p["mvp"].write(_b(M))
+        for k, v in dict(tm=float(tm), eye=tuple(float(x) for x in eye), noise=3, cen=tuple(float(x) for x in c), R=float(d["R"]), Hh=float(d["H"]),
+                         alpha=float(d["alpha"]), grow=float(d["grow"])).items():
+            _set(p, k, v)
+        self.vao_dust.render()
+        ctx.cull_face = "back"
+        ctx.enable(mgl.DEPTH_TEST)
+        ctx.disable(mgl.CULL_FACE)
+        self.msaa.depth_mask = True
+
     def _cloud(self, M, eye, c, cl, tm):
         """volumetric rotating mother cloud: slab from base-0.3*thick to base+0.7*thick"""
         ctx, mgl = self.ctx, self.mgl
@@ -1786,7 +1897,10 @@ class MiniScene:
         self.sfb.clear(depth=1.0)
         ctx.enable(mgl.DEPTH_TEST)
         ctx.disable(mgl.BLEND)
-        bu = dict(yscale=yscale, pa=(local["pa"][0] - O[0], local["pa"][1] - O[2]), pb=(local["pb"][0] - O[0], local["pb"][1] - O[2]),
+        qq = local.get("quake")
+        bu = dict(qk=((qq["pos"][0] - O[0], qq["pos"][1] - O[2]) if qq else (0.0, 0.0)),
+                  qd=((float(qq["R"]), float(qq["amp"]), float(qq["t"]), float(qq["alpha"])) if qq else (1.0, 0.0, 0.0, 0.0)),
+                  yscale=yscale, pa=(local["pa"][0] - O[0], local["pa"][1] - O[2]), pb=(local["pb"][0] - O[0], local["pb"][1] - O[2]),
                   hw=float(local.get("hw", 0.0)), along=float(local.get("along", 0.0)), clen=float(local.get("clen", 1e-4)))
         for prog in (self.p_bld_d, self.p_tree_d):
             prog["mvp"].write(_b(Ls))

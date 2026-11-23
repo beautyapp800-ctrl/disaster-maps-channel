@@ -14,6 +14,8 @@ RAW = "data/raw/hurdat2.txt"
 
 
 def landfalls():
+    import os
+    topic = os.environ.get("TOPIC") or "us"
     """(decimal year of first lower-48 hurricane landfall, Saffir-Simpson category of the strongest one) per storm"""
     import datetime as dt
     from .hurricane import category, in_lower48
@@ -21,7 +23,16 @@ def landfalls():
 
     def flush():
         if cur is not None and lf:
-            out.append((min(x[0] for x in lf), max(category(x[1]) for x in lf)))
+            pts = lf
+            if topic == "florida":
+                from .hurricane import landfall_state
+                pts = [x for x in lf if landfall_state(x[2], x[3]) == "FL"]
+            if not pts:
+                return
+            cat = max(category(x[1]) for x in pts)
+            if topic == "major" and cat < 3:
+                return
+            out.append((min(x[0] for x in pts), cat))
     for line in open(RAW, encoding="utf-8"):
         p = [x.strip() for x in line.split(",")]
         if len(p[0]) == 8 and p[0].startswith("AL"):
@@ -36,7 +47,7 @@ def landfalls():
             continue
         d = dt.datetime(int(p[0][:4]), int(p[0][4:6]), int(p[0][6:8]), int(p[1][:2]), int(p[1][2:]))
         y0, y1 = dt.datetime(d.year, 1, 1), dt.datetime(d.year + 1, 1, 1)
-        lf.append((d.year + (d - y0).total_seconds() / (y1 - y0).total_seconds(), int(p[6])))
+        lf.append((d.year + (d - y0).total_seconds() / (y1 - y0).total_seconds(), int(p[6]), lon, lat))
     flush()
     a = np.array(sorted(out))
     return a[:, 0], a[:, 1].astype(int)
