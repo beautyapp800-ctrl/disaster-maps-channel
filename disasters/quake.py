@@ -271,7 +271,8 @@ class Timeline:
                         out.append((cand, cand + 5.0, text))
                         break
                     cand += 0.5
-        out.append((self.main_end + 1.5, self.main_end + 6.5, "WHERE EARTHQUAKES STRIKE MOST OFTEN"))
+        st0 = max([self.main_end + 1.5] + [c[1] + 1.05 for c in out if c[1] > self.main_end - 8])
+        out.append((st0, st0 + 5.0, "WHERE EARTHQUAKES STRIKE MOST OFTEN"))
         b0 = self.main_end + HEAT_S
         out.append((b0 + 7.0, b0 + 13.0, "THE LARGEST EARTHQUAKES ON THIS MAP"))
         out.sort()

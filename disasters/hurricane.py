@@ -342,7 +342,8 @@ class Timeline:
                         out.append((cand, cand + 5.0, text))
                         break
                     cand += 0.5
-        out.append((self.main_end + 1.5, self.main_end + 6.5, "WHERE HURRICANES COME ASHORE MOST OFTEN"))
+        st0 = max([self.main_end + 1.5] + [c[1] + 1.05 for c in out if c[1] > self.main_end - 8])
+        out.append((st0, st0 + 5.0, "WHERE HURRICANES COME ASHORE MOST OFTEN"))
         b0 = self.main_end + HEAT_S
         from .tornado import STATE_NAMES
         out.append((b0 + 8.0, b0 + 14.0, f"{STATE_NAMES[top]}: {states[top]} OF THE {D.n} LANDFALLS, THE MOST OF ANY STATE"))

@@ -688,6 +688,12 @@ void main(){
     vec4 go = texture(outer, (vt + 0.3)/1.6);
     g = mix(go, g, smoothstep(0.0, 0.012, e));
   } else if (e < 0.0) discard;
+  if (son > 0.5) {
+    vec2 su = (vp.xz - sbox.xy)/sbox.z + 0.5;
+    float sw = smoothstep(0.0, 0.03, min(min(su.x, 1.0 - su.x), min(su.y, 1.0 - su.y)));
+    vec4 sc = texture(stt, clamp(su, 0.0, 1.0));
+    g = vec4(mix(g.rgb, sc.rgb, sc.a*sw*(1.0 - smoothstep(0.6, 1.4, camdist*0.0 + 0.0))), g.a);
+  }
   vec2 lxz = vp.xz - O.xz;
   vec2 wm = lxz*mpu;
   vec2 warp = (texture(noise, wm/90.0).rg - 0.5)*2.0*(22.0/mpu) + (texture(noise, wm/23.0).gb - 0.5)*2.0*(7.0/mpu);   // organic class boundaries
@@ -697,12 +703,6 @@ void main(){
   if (lvon.y > 0.5) { g2 = lvl(lv1, box1, lxz, w); g = mix(g, g2, w); }
   if (lvon.z > 0.5) { g2 = lvl(lv2, box2, lxz, w); g = mix(g, g2, w); }
   if (lvon.w > 0.5) { g2 = lvl(lv3, box3, lxz, w); g = mix(g, g2, w); }
-  if (son > 0.5) {
-    vec2 su = (vp.xz - sbox.xy)/sbox.z + 0.5;
-    float sw = smoothstep(0.0, 0.03, min(min(su.x, 1.0 - su.x), min(su.y, 1.0 - su.y)));
-    vec4 sc = texture(stt, clamp(su, 0.0, 1.0));
-    g = vec4(mix(g.rgb, sc.rgb, sc.a*sw*(1.0 - smoothstep(0.6, 1.4, camdist*0.0 + 0.0))), g.a);
-  }
   vec3 n = normalize(vn);
   vec3 lp = vec3(lxz.x, vp.y, lxz.y);
   float sh = shadowAt(lp, n);
