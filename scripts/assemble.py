@@ -19,7 +19,13 @@ def sh(*a, **k):
     return subprocess.run(a, check=True, **k)
 
 
-segs = sorted(glob.glob(str(seg_dir / "**" / "seg_*.mp4"), recursive=True))
+def segnum(p):
+    return int(re.search(r"seg_(\d+)\.mp4$", p).group(1))
+
+
+# numeric order (a plain path sort puts seg-10 before seg-2: the film would be cut together in the wrong order)
+segs = sorted(glob.glob(str(seg_dir / "**" / "seg_*.mp4"), recursive=True), key=segnum)
+assert [segnum(x) for x in segs] == list(range(len(segs))), "segments are not 0..N-1 without gaps"
 print("segments:", len(segs))
 lst = out_dir / "list.txt"
 lst.write_text("".join(f"file '{Path(s).resolve().as_posix()}'\n" for s in segs))
@@ -47,8 +53,10 @@ if len(files) < 3:
     files = ["assets/music/oga-first-light-particles.mp3", "assets/music/oga-november-snow.mp3"] * 2
 sfx = out_dir / "sfx.wav"
 import os
-HUR = os.environ.get("ENGINE") == "hurricane"
-sh(sys.executable, "-m", "disasters.hsound" if HUR else "disasters.sound", str(sfx))
+ENG = os.environ.get("ENGINE", "tornado")
+SND = {"tornado": "disasters.sound", "hurricane": "disasters.hsound", "earthquake": "disasters.qsound"}[ENG]
+QAM = {"tornado": "disasters.qa", "hurricane": "disasters.hqa", "earthquake": "disasters.qqa"}[ENG]
+sh(sys.executable, "-m", SND, str(sfx))
 mix = out_dir / "mix.wav"
 ins = []
 for f in files:
@@ -93,12 +101,29 @@ if abs(D - exp_s) > 0.6:
     fails.append(f"duration {D:.2f}s, expected {exp_s:.2f}s")
 
 # ---- frame QA (pre-encode, 1 s grid) + data sync, independent of the renderer
-rc = subprocess.run([sys.executable, "-m", "disasters.hqa" if HUR else "disasters.qa", str(seg_dir), str(out_dir / "qa_report.md")]).returncode
+rc = subprocess.run([sys.executable, "-m", QAM, str(seg_dir), str(out_dir / "qa_report.md")]).returncode
 if rc:
     fails.append("frame QA failed (see qa_report.md)")
 
 # ---- contact sheet + preview
 th = sorted(glob.glob(str(seg_dir / "**" / "thumbs" / "t*.jpg"), recursive=True), key=lambda f: int(re.search(r"t(\d+)\.jpg", f).group(1)))
+# ---- order check: frames of the delivered file must match the thumbnails the renderer saved for the same second
+import numpy as np
+bad_order = 0
+for f in th:
+    tt = int(re.search(r"t(\d+)\.jpg", f).group(1))
+    png = out_dir / f"chk_{tt}.png"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{tt + 0.2:.2f}", "-i", str(final), "-frames:v", "1", "-vf", "scale=160:90", str(png)], check=False)
+    if not png.exists():
+        continue
+    a = np.asarray(Image.open(png).convert("L"), "f4")
+    b = np.asarray(Image.open(f).convert("L").resize((160, 90), Image.LANCZOS), "f4")
+    if float(np.abs(a - b).mean()) > 22.0:
+        bad_order += 1
+    png.unlink()
+print("order check: thumbnails that do not match the video:", bad_order, "of", len(th))
+if th and bad_order > max(2, len(th) // 12):
+    fails.append(f"segments are in the wrong order or damaged: {bad_order} of {len(th)} thumbnails do not match the video")
 ims = [Image.open(f) for f in th]
 if ims:
     cols = 5
