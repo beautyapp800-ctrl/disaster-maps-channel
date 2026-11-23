@@ -542,6 +542,7 @@ class StateLabels:
         step = 1.0 / (0.35 * FPS)
         for it in self.items:
             target = 0.0
+            hard = False
             text, box = None, None
             if glob > 0:
                 p = it["p"].copy()
@@ -566,10 +567,16 @@ class StateLabels:
                         free = not any(not (box[2] < b[0] or box[0] > b[2] or box[3] < b[1] or box[1] > b[3]) for b in placed)
                         if inside and free:
                             target = 1.0
+                        else:
+                            hard = True
             a = self.alpha.get(it["ab"], target)
-            a = min(target, a + step) if target > a else max(target, a - step)
+            a = min(target, a + step) if target > a else max(target, a - step * (4.0 if hard else 1.0))
             self.alpha[it["ab"]] = a
             if a <= 0.01 or text is None:
+                continue
+            if hard and a > 0.01:
+                a = min(a, 0.0)          # never draw over a panel/caption/card
+                self.alpha[it["ab"]] = 0.0
                 continue
             placed.append(box)
             al = int(255 * a * glob * 0.92)
@@ -757,10 +764,13 @@ class Renderer:
             ca = smooth((tl - (HIT - 2.2)) / 1.5) * (1.0 - smooth((u - 0.58) / 0.28))
             fa = smooth((tl - (HIT - 1.6)) / 1.0) * (1.0 - smooth((u - 0.62) / 0.22))
         g = self.dir.ground(e["key"], along)
+        alt = ((cam.ty - g[1]) * self.scene.yscale(cam) + cam.dist * math.sin(math.radians(cam.pitch))) * U      # camera height above the ground, m
+        ca *= 1.0 - float(smooth((alt - 420.0) / 220.0))                  # the camera never flies through the cloud layer (base 660 m)
         loc = dict(key=e["key"], pa=tuple(info["pa"]), pb=tuple(info["pb"]), hw=hw_m / U, along=along, clen=hw_m * 0.8 / U,
                    storm=(g[0], g[2], 2800 / U, 0.55 * ca))
         if fa > 0.01 and cam.dist < 0.03:
-            loc["funnel"] = dict(pos=tuple(g), H=680 / U, r0=min(240.0, max(80.0, hw_m * 0.42)) / U, alpha=fa, dark=0.85, dusty=1.0)
+            loc["funnel"] = dict(pos=tuple(g), H=680 / U, r0=min(240.0, max(80.0, hw_m * 0.42)) / U, alpha=fa, dark=0.85, dusty=1.0,
+                                 flare=float(min(1.0, ca * 1.5)))
             loc["debris"] = fa
             loc["cloud"] = dict(r=2600 / U, base=660 / U, thick=600 / U, alpha=ca)
         return loc
@@ -796,8 +806,10 @@ class Renderer:
                 fp[:, 1] *= self.scene.yscale(cam)
                 fx = float(vcam.project(fp, W, H)[0][0, 0])
             labs = self.labels(img, vcam, min(1.0, (0.03 - cam.dist) / 0.01), fx)
+        avoid = [p[1] for p in self.hud(img.copy(), t, ph, cam)["panels"] if p[2] > 0.02]       # where the panels/captions/cards will be
+        shown = self.states.draw(img, vcam, self.scene.yscale(cam), avoid)
         meta = self.hud(img, t, ph, cam)
-        meta["states"] = self.states.draw(img, vcam, self.scene.yscale(cam), [p[1] for p in meta["panels"] if p[2] > 0.02])
+        meta["states"] = shown
         meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"], labels=labs)
         return img, meta
 
@@ -820,7 +832,7 @@ class Renderer:
         sz = int(34 * K)
         fnt = font(sz)
         for (lb, _), (x, y), good in sorted(zip(cand, px, ok), key=lambda a: a[0][0]["pri"]):
-            if not good or not (0.08 * W < x < 0.92 * W and 0.42 * H < y < 0.70 * H):
+            if not good or not (0.08 * W < x < 0.92 * W and 0.52 * H < y < 0.74 * H):
                 continue
             if avoid_x is not None and abs(x - avoid_x) < 0.16 * W:
                 continue

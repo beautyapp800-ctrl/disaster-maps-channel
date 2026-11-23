@@ -232,7 +232,7 @@ class Director:
 
         def close(u):
             rise = smooth((u - 0.62) / 0.38)
-            return Cam(tw[0], tw[1] + (120 + 200 * rise) / U * core.EXAG, tw[2], (1300 + 1400 * rise) / U, 10.0 + 24.0 * rise, yaw + 14.0 * u)
+            return Cam(tw[0], tw[1] + (120 + 60 * rise) / U * core.EXAG, tw[2], (1300 + 800 * rise) / U, 10.0 + 7.0 * rise, yaw + 14.0 * u)
         if e["short"]:
             if tl < HIT:
                 return lerp_cam(orbit, close(0.0), smooth(tl / HIT))
@@ -363,7 +363,9 @@ class Renderer:
         loc = dict(key=e["key"], pa=(0.0, 0.0), pb=(1e-6, 0.0), hw=0.0, along=0.0, clen=1e-4, storm=(tw[0], tw[2], 9000 / U, 0.6 * storm),
                    wind=storm, rain=storm if cam.dist < 0.03 else 0.0)
         if cam.dist < 0.03 and storm > 0.01:
-            loc["cloud"] = dict(r=7000 / U, base=520 / U, thick=500 / U, alpha=storm, spin=0.02)
+            alt = ((cam.ty - tw[1]) * self.scene.yscale(cam) + cam.dist * math.sin(math.radians(cam.pitch))) * U     # camera height above the ground, m
+            storm *= 1.0 - float(smooth((alt - 650.0) / 250.0))         # the camera never flies through the cloud layer
+            loc["cloud"] = dict(r=7000 / U, base=1100 / U, thick=450 / U, alpha=storm, spin=0.02)
             loc["cloud_pos"] = tuple(tw)
             loc["surge"] = dict(level=e.get("surge_m", 0.0) * smooth((u - 0.1) / 0.6), alpha=storm)
         return loc
@@ -388,8 +390,10 @@ class Renderer:
             for s, x, y, z, v in self.bars:
                 bars.append((x, y, z, 0.085, max(0.004, v * 0.62 * g), self.bar_color(v)))
         img = self.scene.render(cam, tm=t, dim=0.92 if mode in ("heat", "bars") else 1.0, ovl_alpha=ovl_alpha, bars=bars, local=loc, hurricanes=hur)
+        avoid = [p[1] for p in self.hud(img.copy(), t, ph, cam)["panels"] if p[2] > 0.02]
+        shown = self.states.draw(img, self.scene.view_cam(cam), self.scene.yscale(cam), avoid)
         meta = self.hud(img, t, ph, cam)
-        meta["states"] = self.states.draw(img, self.scene.view_cam(cam), self.scene.yscale(cam), [p[1] for p in meta["panels"] if p[2] > 0.02])
+        meta["states"] = shown
         meta.update(n=n, t=round(t, 3), mode=mode, kind=ph["kind"], storms=len(hur))
         return img, meta
 

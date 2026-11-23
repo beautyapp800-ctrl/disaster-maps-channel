@@ -102,6 +102,9 @@ def region_image(key, lvl):
     d = ROOT / "data" / "region"
     cls = np.asarray(Image.open(d / f"{key}_{lvl}.png"))
     col = _lut(NAT_PAL if lvl == "reg" else LOC_PAL)[cls]
+    if lvl == "mid":                      # 30 m land-cover cells: field patchwork + soft edges instead of visible pixel blocks
+        col = _fields(col, cls, cls.shape[0], 64.0)
+        col = np.asarray(Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.6))).astype(np.float32)
     hf = d / f"{key}_{lvl}_hs.jpg"
     if hf.exists():
         col *= _hs_mult(np.asarray(Image.open(hf).convert("L")))
@@ -170,14 +173,15 @@ def _fields(img, cls, n, km):
     gy = yy // cell
     h = np.sin(gx * 12.9898 + gy * 78.233) * 43758.5453
     h = h - np.floor(h)
-    palette = np.array([(224, 198, 108), (190, 204, 98), (150, 184, 82), (206, 170, 96), (232, 214, 140), (168, 196, 92)], np.float32)
-    pick = palette[(h * len(palette)).astype(int) % len(palette)]
-    tint = 0.72 * pick + 0.28 * img
+    h2 = np.sin(gx * 39.3468 + gy * 11.135) * 24634.6345
+    h2 = h2 - np.floor(h2)
+    bright = (0.84 + 0.30 * h)[..., None]
+    tint = np.stack([1.0 + 0.16 * (h2 - 0.5), 1.0 + 0.05 * (h2 - 0.5), 1.0 - 0.22 * (h2 - 0.5)], -1)
     f = crop[..., None]
-    out = np.where(f, tint, img)
-    # faint field boundaries
-    edge = ((xx % cell) < 1) | ((yy % cell) < 1)
-    out = np.where(f & edge[..., None], out * 0.86, out)
+    out = np.where(f, img * bright * tint, img)
+    if cell >= 10:                            # faint field boundaries only where a field is big enough to read
+        edge = ((xx % cell) < 1) | ((yy % cell) < 1)
+        out = np.where(f & edge[..., None], out * 0.90, out)
     return out.astype(np.float32)
 
 
@@ -321,7 +325,7 @@ class Town:
         lut = _lut(LOC_PAL)
         lut[11] = LOC_PAL[21]          # water comes from OpenStreetMap at this scale (crisp shorelines)
         col = lut[np.asarray(crop)]
-        im = Image.fromarray(col.astype(np.uint8)).resize((n, n), Image.BILINEAR).filter(ImageFilter.GaussianBlur(n / 1200))
+        im = Image.fromarray(col.astype(np.uint8)).resize((n, n), Image.BILINEAR).filter(ImageFilter.GaussianBlur(n / 520))
         out = np.asarray(im).astype(np.float32)
         crop_full = np.asarray(Image.fromarray(np.asarray(crop)).resize((n, n), Image.NEAREST))
         out = _fields(out, crop_full, n, km)
@@ -683,6 +687,9 @@ void main(){
     g = mix(go, g, smoothstep(0.0, 0.012, e));
   } else if (e < 0.0) discard;
   vec2 lxz = vp.xz - O.xz;
+  vec2 wm = lxz*mpu;
+  vec2 warp = (texture(noise, wm/90.0).rg - 0.5)*2.0*(22.0/mpu) + (texture(noise, wm/23.0).gb - 0.5)*2.0*(7.0/mpu);   // organic class boundaries
+  lxz += warp*(1.0 - smoothstep(0.03, 0.30, camdist));
   float w; vec4 g2;
   if (lvon.x > 0.5) { g2 = lvl(lv0, box0, lxz, w); g = mix(g, g2, w); }
   if (lvon.y > 0.5) { g2 = lvl(lv1, box1, lxz, w); g = mix(g, g2, w); }

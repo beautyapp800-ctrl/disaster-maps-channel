@@ -39,9 +39,9 @@ step() {  # engine slug tag keys...
     echo "$eng failed at both resolutions: manual check needed"; return 0
   fi
   # no 4K run yet: data must be complete (all prep jobs finished, at least all but one town present)
-  [ "$prep" != "0" ] && { echo "waiting for data jobs"; exit 0; }
   local got; got=$(count "$@")
   if [ "$got" -lt $((total - 2)) ]; then
+    [ "$prep" != "0" ] && { echo "waiting for data jobs"; exit 0; }
     missing=""; for k in "$@"; do [ "$(have "$k")" = "0" ] && missing="$missing $k"; done
     tries=$(gh run list --workflow prep-mini.yml --limit 50 --json displayTitle -q '[.[]|select(.displayTitle|test("osm"))]|length')
     if [ "$tries" -lt 8 ]; then echo "retry OSM for:$missing"; gh workflow run prep-mini.yml --ref dev -f what="osm$missing"; fi
