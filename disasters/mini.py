@@ -697,10 +697,10 @@ void main(){
   vec2 lxz = vp.xz - O.xz;
   vec2 wm = lxz*mpu;
   vec2 warp = (texture(noise, wm/90.0).rg - 0.5)*2.0*(22.0/mpu) + (texture(noise, wm/23.0).gb - 0.5)*2.0*(7.0/mpu);   // organic class boundaries
-  lxz += warp*(1.0 - smoothstep(0.03, 0.30, camdist));
+  vec2 lwp = lxz + warp*(1.0 - smoothstep(0.03, 0.30, camdist));      // warped coordinates only for the coarse land-cover levels
   float w; vec4 g2;
-  if (lvon.x > 0.5) { g2 = lvl(lv0, box0, lxz, w); g = mix(g, g2, w); }
-  if (lvon.y > 0.5) { g2 = lvl(lv1, box1, lxz, w); g = mix(g, g2, w); }
+  if (lvon.x > 0.5) { g2 = lvl(lv0, box0, lwp, w); g = mix(g, g2, w); }
+  if (lvon.y > 0.5) { g2 = lvl(lv1, box1, lwp, w); g = mix(g, g2, w); }
   if (lvon.z > 0.5) { g2 = lvl(lv2, box2, lxz, w); g = mix(g, g2, w); }
   if (lvon.w > 0.5) { g2 = lvl(lv3, box3, lxz, w); g = mix(g, g2, w); }
   vec3 n = normalize(vn);
