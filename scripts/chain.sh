@@ -57,7 +57,7 @@ step() {  # (a slug listed in state/chain_done.txt is skipped)
   launch "$eng" 2160 "$slug" "$tag" "$topic" "$texw"
 }
 # v4 (owner 23.11): state names + crisp borders, short zooms every 30-40 s
-step tornado us-tornadoes-1950-2025 v4 "" 4096 - $TORN
+step tornado us-tornadoes-1950-2025 v5 "" 4096 - $TORN
 step earthquake california-earthquakes-1900-2025 v1 "" 6144 data/world/state_ca.png $QUAKE
 step hurricane us-hurricane-landfalls-1851-2025 v4 "" 4096 - $HURR
 step hurricane major-hurricanes-us major-v1 major 4096 - $HURR

@@ -105,6 +105,8 @@ def region_image(key, lvl):
     if lvl == "mid":                      # 30 m land-cover cells: field patchwork + soft edges instead of visible pixel blocks
         col = _fields(col, cls, cls.shape[0], 64.0)
         col = np.asarray(Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.6))).astype(np.float32)
+    elif lvl == "reg":                    # 73 m cells seen from far away: soft edges instead of pixel blocks
+        col = np.asarray(Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2.4))).astype(np.float32)
     hf = d / f"{key}_{lvl}_hs.jpg"
     if hf.exists():
         col *= _hs_mult(np.asarray(Image.open(hf).convert("L")))
