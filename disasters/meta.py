@@ -26,7 +26,7 @@ def tornado_us(slug):
             "Buildings: (c) OpenStreetMap contributors, ODbL (openstreetmap.org/copyright)\n"
             "Relief: NOAA ETOPO1. Borders: US Census Bureau, Natural Earth.\n"
             "Music (CC0, OpenGameArt): " + "; ".join(f"{t['title']} by {t['creator']}" for t in music) + ". Sound effects made for this video.\n"
-            "2025 data is preliminary. Paths are drawn as straight lines between the official start and end points.\n\n"
+            "2025 data is preliminary. Paths are drawn as straight lines between the official start and end points. In the town close-ups the path is placed through the town named on the card.\n\n"
             "#tornado #tornadoalley #weather #map #NOAA\n"
             f"[ref: {CHANNEL_REF}/{slug}]")
     tags = ["tornado", "tornadoes", "every tornado", "tornado map", "tornado history", "tornado alley", "F5 tornado", "EF5", "Joplin tornado",

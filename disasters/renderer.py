@@ -307,15 +307,49 @@ class Director:
             osm = ROOT / "data" / "osm" / f"{e['key']}.json.gz"
             if osm.exists():
                 import gzip
-                c = json.load(gzip.open(osm, "rt", encoding="utf-8"))["center"]
+                od = json.load(gzip.open(osm, "rt", encoding="utf-8"))
+                c = od["center"]
                 O = np.array(FR.world(c[1], c[0]), float)
                 s_c = float(np.dot(O - pa, dv))
                 run = self.RUN_KM / core.KM_PER_UNIT
-                info.update(town=e["key"], s_c=s_c, s0=max(0.0, s_c - run), s1=min(L, s_c + run))
+                s0, s1 = max(0.0, s_c - run), min(L, s_c + run)
+                # The SPC path is a straight line between the official start and end points; the real tracks curve. NWS confirms each
+                # tornado hit the town named on the card, so in the close-up the path is placed (parallel to the SPC line, at most
+                # path_offset + 1.5 km sideways) through the densest built-up area inside the OpenStreetMap window.
+                shift = self.town_shift(od, e["key"], pa, dv, s0, s1, D.wd[i])
+                nrm_ = np.array([-dv[1], dv[0]])
+                pa, pb = pa + nrm_ * shift, pb + nrm_ * shift
+                info.update(town=e["key"], s_c=s_c, s0=s0, s1=s1, pa=pa, pb=pb, shift_m=shift * core.KM_PER_UNIT * 1000.0)
             self.ev[e["key"]] = info
         # soft shake: only when the strongest (F5/EF5) famous tornado touches down in the close-up
         self.hits = sorted((e["t0"] + EV_HIT, 0.0030) for e in D.events if D.mag[e["idx"]] == 5 and self.ev[e["key"]]["town"])
         self.hit_t = [h[0] for h in self.hits]
+
+    def town_shift(self, od, key, pa, dv, s0, s1, wd_yd):
+        """sideways shift (world units) of the close-up path that puts the most OSM buildings inside the damage swath"""
+        b = od.get("buildings") or []
+        if len(b) < 20:
+            return 0.0
+        g = np.array([np.asarray(x["g"]).reshape(-1, 2).mean(0) for x in b])
+        x, z = FR.world(g[:, 0], g[:, 1])
+        rel = np.stack([x, z], 1) - pa
+        s = rel @ dv
+        d = rel @ np.array([-dv[1], dv[0]])
+        U = core.KM_PER_UNIT * 1000.0
+        try:
+            off_km = json.loads((ROOT / "data" / "local" / f"{key}.json").read_text())["path_offset_km"]
+        except Exception:  # noqa: BLE001
+            off_km = 0.0
+        lim = (off_km + 1.5) * 1000.0 / U
+        hw = max(300.0, wd_yd * 0.9144 / 2 * 0.62) / U
+        inrun = (s > s0) & (s < s1)
+        best, bs = 0.0, -1.0
+        for t in np.linspace(-lim, lim, 61):
+            n = float((np.abs(d[inrun] - t) < hw).sum())
+            sc = n - 0.15 * abs(t) / max(lim, 1e-9) * n * 0.0 - 1e-3 * abs(t) * U
+            if sc > bs:
+                best, bs = float(t), sc
+        return best
 
     def _keys(self):
         TL = self.TL

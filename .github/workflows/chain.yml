@@ -5,6 +5,8 @@ on:
   workflow_run:
     workflows: [prep-mini, pilot]
     types: [completed]
+  schedule:
+    - cron: "7,27,47 * * * *"
   workflow_dispatch:
 permissions:
   contents: read

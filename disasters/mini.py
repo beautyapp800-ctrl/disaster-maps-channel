@@ -158,6 +158,29 @@ def _kind(t):
     return None
 
 
+def _fields(img, cls, n, km):
+    """cropland and pasture as a patchwork of fields (about 400 m parcels, mile-grid roads) instead of one flat colour"""
+    crop = np.isin(cls, (81, 82, 71, 52, 31))
+    if not crop.any():
+        return img
+    cell = max(8, int(round(400.0 * n / (km * 1000.0))))
+    ij = np.indices((n, n))
+    yy, xx = ij[0] + 0.37 * ij[1] * 0.0, ij[1]
+    gx = (xx + 0.5 * cell * ((yy // cell) % 2)) // cell          # brick-like parcels
+    gy = yy // cell
+    h = np.sin(gx * 12.9898 + gy * 78.233) * 43758.5453
+    h = h - np.floor(h)
+    palette = np.array([(224, 198, 108), (190, 204, 98), (150, 184, 82), (206, 170, 96), (232, 214, 140), (168, 196, 92)], np.float32)
+    pick = palette[(h * len(palette)).astype(int) % len(palette)]
+    tint = 0.72 * pick + 0.28 * img
+    f = crop[..., None]
+    out = np.where(f, tint, img)
+    # faint field boundaries
+    edge = ((xx % cell) < 1) | ((yy % cell) < 1)
+    out = np.where(f & edge[..., None], out * 0.86, out)
+    return out.astype(np.float32)
+
+
 class Town:
     """OSM model of one town in world coordinates, relative to the window centre O (float64 on the CPU)."""
 
@@ -299,7 +322,10 @@ class Town:
         lut[11] = LOC_PAL[21]          # water comes from OpenStreetMap at this scale (crisp shorelines)
         col = lut[np.asarray(crop)]
         im = Image.fromarray(col.astype(np.uint8)).resize((n, n), Image.BILINEAR).filter(ImageFilter.GaussianBlur(n / 1200))
-        return np.asarray(im).astype(np.float32), np.asarray(crop)
+        out = np.asarray(im).astype(np.float32)
+        crop_full = np.asarray(Image.fromarray(np.asarray(crop)).resize((n, n), Image.NEAREST))
+        out = _fields(out, crop_full, n, km)
+        return out, np.asarray(crop)
 
     # ---- buildings: extruded footprints
     def building_mesh(self):

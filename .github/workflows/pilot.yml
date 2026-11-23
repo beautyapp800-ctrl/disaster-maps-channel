@@ -1,5 +1,5 @@
 name: pilot
-run-name: pilot ${{ inputs.engine || 'tornado' }} ${{ inputs.res || '2160' }}
+run-name: pilot ${{ inputs.engine || 'tornado' }} ${{ inputs.res || '2160' }}${{ inputs.tag && format(' {0}', inputs.tag) || '' }}
 # Manual only (automation stays OFF until the owner says ok). Renders "Every Tornado in US History Mapped".
 # Parallel segments on the runner (OpenGL on the CPU), then assemble + QA. max-parallel 6 keeps the account's 20-job limit free.
 on:
@@ -8,6 +8,7 @@ on:
       engine: {type: string, default: "tornado"}
       slug: {type: string, default: ""}
       store: {type: string, default: "false"}
+      tag: {type: string, default: ""}
       res: {type: string, default: "2160"}
       texw: {type: string, default: "4096"}
       segments: {type: string, default: "24"}
@@ -23,6 +24,9 @@ on:
       store:
         description: "true = create the draft release reserve-<slug> when done (no upload to YouTube)"
         default: "false"
+      tag:
+        description: "version tag shown in the run name (the chain looks for it)"
+        default: ""
       res:
         description: "video height (2160 = 4K, 1080, 360 = smoke test)"
         default: "2160"
