@@ -14,6 +14,8 @@ FLOR="laborday1935 andrew1992 michael2018 ian2022 helene2024 miami1926 eloise197
 QUAKE="sanfrancisco1906 longbeach1933 tehachapi1952 sylmar1971 santacruz1989 yuccavalley1992 northridge1994 ridgecrest2019 santabarbara1925 imperial1940 coalinga1983 ferndale1992 pasorobles2003 napa2014 riodell2022"
 
 active=$(gh run list --workflow pilot.yml --json status -q '[.[]|select(.status!="completed")]|length')
+fixing=$(gh run list --workflow fix-segment.yml --json status -q '[.[]|select(.status!="completed")]|length')
+active=$((active + fixing))
 prep=$(gh run list --workflow prep-mini.yml --json status -q '[.[]|select(.status!="completed")]|length')
 echo "pilot runs active: $active, prep-mini runs active: $prep"
 [ "$active" != "0" ] && exit 0
@@ -32,10 +34,11 @@ launch() {  # engine res slug tag topic texw
   exit 0
 }
 # step engine slug tag topic texw needs(file or -) keys...
-step() {
+step() {  # (a slug listed in state/chain_done.txt is skipped)
   local eng="$1" slug="$2" tag="$3" topic="$4" texw="$5" need="$6"; shift 6
   local total=$#
   local r4 r14
+  if [ -f state/chain_done.txt ] && grep -qx "$slug${topic:+:$topic}" state/chain_done.txt; then echo "$slug done (state/chain_done.txt)"; return 0; fi
   r4=$(res_of "$eng" 2160 "$tag"); r14=$(res_of "$eng" 1440 "$tag")
   if [ "$r4" = "success" ] || [ "$r14" = "success" ]; then echo "$slug done"; return 0; fi
   if [ "$r4" = "failure" ] || [ "$r4" = "cancelled" ]; then
