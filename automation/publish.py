@@ -64,6 +64,15 @@ def _state_ahead(state):
     return sum(1 for e in state if e.get("publish_at") and datetime.fromisoformat(e["publish_at"].replace("Z", "+00:00")) > now)
 
 
+def not_before():
+    """owner 23.11: the first video must publish no earlier than state/schedule.json -> not_before (UTC)"""
+    f = ROOT / "state" / "schedule.json"
+    if not f.exists():
+        return None
+    v = json.loads(f.read_text(encoding="utf-8")).get("not_before")
+    return datetime.fromisoformat(v.replace("Z", "+00:00")) if v else None
+
+
 def music_clear():
     """owner rule: every music track went through a test private upload and a Content ID check before the first publication"""
     if not CONTENTID.exists():
@@ -125,7 +134,8 @@ def main():
                 persist(state, f"state: {slug} found on the channel ({ex['id']})")
             continue
         taken = list(youtube.channel_dates(videos)) + [e["publish_at"] for e in state if e.get("publish_at")] + sim_taken
-        slot = youtube.next_slot(taken)
+        nb = not_before()
+        slot = youtube.next_slot(taken, now=max(datetime.now(timezone.utc), nb) if nb else None)
         print(f"{slug}: slot {slot.isoformat()}")
         if DRY:
             print("DRY RUN: would upload", title, "\n", desc[:600])
