@@ -39,7 +39,9 @@ from disasters.hurricane import EVENTS as H_EVENTS, SHORTS as H_SHORTS  # noqa: 
 from disasters.tornado import SHORT_KEYS as T_SHORTS  # noqa: E402
 
 HTOWNS = [e[0] for e in H_EVENTS + H_SHORTS]
-LIGHT = set(HTOWNS) | set(T_SHORTS)     # mid level only, coarse source (keeps the PC download small)
+from disasters.quake import ALL_KEYS as Q_KEYS  # noqa: E402
+
+LIGHT = set(HTOWNS) | set(T_SHORTS) | set(Q_KEYS)     # mid level only, coarse source (keeps the PC download small)
 H_LEVELS = {"mid": (64.0, 4096, 0.0006)}      # hurricane towns: mid level only, coarser source (keeps the PC download small)
 
 Image.MAX_IMAGE_PIXELS = None
@@ -324,9 +326,11 @@ def osm(keys):
 if __name__ == "__main__":
     args = sys.argv[1:]
     what = {a for a in args if a in ("nation", "region", "osm", "outer", "dem")} or {"nation", "region", "osm"}
-    keys = [a for a in args if a in TOWNS or a in HTOWNS] or list(TOWNS)
+    keys = [a for a in args if a in TOWNS or a in HTOWNS or a in Q_KEYS] or list(TOWNS)
     if "hurricanes" in args:
         keys = HTOWNS
+    if "quakes" in args:
+        keys = list(Q_KEYS)
     if "shorts" in args:
         keys = sorted(T_SHORTS) + [e[0] for e in H_SHORTS]
     if "osm" in what:
