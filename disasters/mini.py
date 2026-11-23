@@ -756,11 +756,12 @@ void main(){
   if (qr.w > 0.0) {
     float dq = length(lxz - qk);
     float rr = qr.y*qr.z;
-    float wr = max(rr*0.05, 4.0/mpu);
+    float wr = max(rr*0.025, 22.0/mpu);
     float ring = exp(-pow((dq - rr)/wr, 2.0)) * (1.0 - smoothstep(2.0, 5.0, rr/max(qr.x, 1e-9)));
-    col = mix(col, vec3(1.0, 0.72, 0.30), ring*0.50*qr.w);
+    col = mix(col, vec3(1.0, 0.74, 0.34), ring*0.78*qr.w);
     float inten = exp(-dq/max(qr.x, 1e-9));
-    col = mix(col, vec3(0.50, 0.42, 0.34), smoothstep(0.50, 0.90, inten)*smoothstep(1.5, 4.0, qr.z)*0.55*qr.w);
+    float pat = texture(noise, m/160.0).g;
+    col = mix(col, mix(vec3(0.44, 0.36, 0.29), vec3(0.62, 0.55, 0.47), pat), smoothstep(0.55, 0.92, inten*(0.7 + 0.6*pat))*smoothstep(1.5, 4.0, qr.z)*0.62*qr.w);
   }
   vec4 o = texture(ovl, uv);
   col = mix(col, o.rgb, o.a*ovl_alpha*step(0.0, e));
@@ -770,6 +771,14 @@ void main(){
   col = mix(vec3(0.42,0.66,0.94), col, smoothstep(0.0, 1.0, ved));
   c = vec4(col, 1.0);
 }"""
+
+VS_SKIRT = """#version 330
+uniform mat4 mvp; in vec2 p; out vec3 vp;
+void main(){ vp = vec3(p.x, -0.00002, p.y); gl_Position = mvp*vec4(vp, 1.0); }"""
+FS_SKIRT = """#version 330
+uniform vec3 eye; uniform float camdist; in vec3 vp; out vec4 c;
+void main(){ float d = length(vp - eye)/max(camdist, 1e-6);
+  vec3 col = mix(vec3(0.12,0.46,0.82), vec3(0.50,0.72,0.95), smoothstep(5.0, 22.0, d)); c = vec4(col, 1.0); }"""
 
 VS_SKY = """#version 330
 in vec2 p; out float vy; void main(){ gl_Position = vec4(p, 0.9999, 1.0); vy = p.y*0.5+0.5; }"""
@@ -1039,16 +1048,16 @@ float dens(vec3 q){
   float d = 0.0;
   for (int k = 0; k < 9; k++) {
     float fk = float(k);
-    vec2 pc = (vec2(hsh(fk*1.7), hsh(fk*3.1 + 1.0)) - 0.5)*1.6*R;
-    float hgt = grow*(0.40 + 0.60*hsh(fk*5.3));
-    float w = R*(0.10 + 0.16*hsh(fk*7.7))*(0.7 + 1.3*h);
-    vec2 dd = q.xz - pc - vec2(sin(tm*0.6 + fk), cos(tm*0.5 + fk*2.0))*R*0.04*h;
+    vec2 pc = (vec2(hsh(fk*1.7), hsh(fk*3.1 + 1.0)) - 0.5)*1.5*R;
+    float hgt = grow*(0.35 + 0.65*hsh(fk*5.3));
+    float w = R*(0.05 + 0.08*hsh(fk*7.7))*(0.6 + 1.5*h);
+    vec2 dd = q.xz - pc - vec2(sin(tm*0.6 + fk), cos(tm*0.5 + fk*2.0))*R*0.05*h;
     float r = length(dd)/w;
-    float col = exp(-r*r)*(1.0 - smoothstep(hgt*0.65, hgt, h))*smoothstep(0.0, 0.05, h);
-    float n = texture(noise, dd/(R*0.7) + vec2(h*0.6 - tm*0.03, fk*0.31)).g;
-    d += col*(0.45 + n);
+    float col = exp(-r*r)*(1.0 - smoothstep(hgt*0.55, hgt, h))*smoothstep(0.0, 0.04, h);
+    float n = texture(noise, dd/(R*0.22) + vec2(h*0.9 - tm*0.04, fk*0.31)).g;
+    d += col*(0.15 + 1.5*smoothstep(0.30, 0.78, n));
   }
-  return d*0.8;
+  return d*0.9;
 }
 void main(){
   vec3 ro = eye - cen; vec3 rd = normalize(vp - eye);
@@ -1065,7 +1074,7 @@ void main(){
     vec3 q = ro + rd*(ta + (float(i) + jit)*dt);
     float d = dens(q);
     if (d < 0.01) continue;
-    float a = 1.0 - exp(-d*dt/Hh*7.0);
+    float a = 1.0 - exp(-d*dt/Hh*6.8);
     float occ = dens(q + SUN*Hh*0.15);
     vec3 col = mix(vec3(0.50,0.41,0.31), vec3(0.80,0.73,0.63), clamp(q.y/Hh*1.2, 0.0, 1.0))*(0.62 + 0.45*exp(-occ*1.2));
     C += (1.0 - A)*a*col; A += (1.0 - A)*a;
@@ -1346,6 +1355,8 @@ class MiniScene:
         self.t_ovl.repeat_x = self.t_ovl.repeat_y = False
         self.t_ovl.build_mipmaps()
         self.t_dummy = ctx.texture((4, 4), 4, b"\x00" * 64)
+        self.p_skirt = ctx.program(vertex_shader=VS_SKIRT, fragment_shader=FS_SKIRT)
+        self.vao_skirt = ctx.vertex_array(self.p_skirt, [(ctx.buffer(np.array([-12, -12, 12, -12, -12, 12, 12, 12], "f4").tobytes()), "2f", "p")])
         self.p_sky = ctx.program(vertex_shader=VS_SKY, fragment_shader=FS_SKY)
         self.vao_sky = ctx.vertex_array(self.p_sky, [(ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], "f4").tobytes()), "2f", "p")])
         # unit meshes
@@ -1670,6 +1681,10 @@ class MiniScene:
         self.p_sky["storm_sky"].value = float(min(0.85, local.get("storm", (0, 0, 1, 0))[3] * 1.2)) if local else 0.0
         self.vao_sky.render(mgl.TRIANGLE_STRIP)
         ctx.enable(mgl.DEPTH_TEST)
+        self.p_skirt["mvp"].write(_b(M0))
+        _set(self.p_skirt, "eye", tuple(float(v) for v in eye))
+        _set(self.p_skirt, "camdist", float(cam.dist))
+        self.vao_skirt.render(mgl.TRIANGLE_STRIP)
         # terrain
         self.t_nat.use(0)
         (self.t_outer or self.t_dummy).use(11)

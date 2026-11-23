@@ -263,8 +263,8 @@ class Director:
     def _keys(self):
         TL = self.TL
         cx, cz = self.cx, self.cz
-        k = [(0.0, 52, -12, 2.5, cx + 0.10, cz), (12.0, 56, 10, 2.35, cx - 0.05, cz), (INTRO_S, 56, 0, 2.3, cx, cz)]
-        pat = [(54, -10, 2.3, 0.05, 0.12), (58, 12, 2.1, -0.05, -0.10), (52, -4, 2.4, 0.03, 0.05), (57, 8, 2.2, -0.03, 0.10)]
+        k = [(0.0, 52, -12, 1.85, cx + 0.06, cz + 0.04), (12.0, 56, 10, 1.75, cx - 0.03, cz + 0.04), (INTRO_S, 56, 0, 1.7, cx, cz + 0.04)]
+        pat = [(54, -10, 1.7, 0.04, 0.09), (58, 12, 1.6, -0.04, 0.0), (52, -4, 1.75, 0.03, 0.06), (57, 8, 1.65, -0.02, 0.08)]
         t, j = INTRO_S + 12.0, 0
         while t < TL.main_end - 6:
             p = pat[j % len(pat)]
@@ -272,9 +272,9 @@ class Director:
             t += 14.0
             j += 1
         h0 = TL.main_end
-        k += [(h0, 70, 0, 2.5, cx, cz), (h0 + HEAT_S, 64, 6, 2.4, cx, cz + 0.05), (h0 + HEAT_S + 3.0, 48, -18, 2.3, cx, cz),
-              (h0 + HEAT_S + LIST_S, 52, 18, 2.2, cx, cz), (h0 + HEAT_S + LIST_S + 6.0, 62, 0, 2.5, cx, cz),
-              (TL.total, 70, 0, 2.7, cx, cz)]
+        k += [(h0, 70, 0, 1.9, cx, cz + 0.04), (h0 + HEAT_S, 64, 6, 1.8, cx, cz + 0.06), (h0 + HEAT_S + 3.0, 48, -18, 1.7, cx, cz + 0.05),
+              (h0 + HEAT_S + LIST_S, 52, 18, 1.65, cx, cz + 0.05), (h0 + HEAT_S + LIST_S + 6.0, 62, 0, 1.8, cx, cz + 0.04),
+              (TL.total, 70, 0, 2.0, cx, cz + 0.04)]
         return k
 
     def base_cam(self, t):
@@ -423,7 +423,7 @@ class Renderer:
         cam = self.dir.cam(t)
         self.scene.set_overlay(tex)
         kz = min(1.0, max(0.0, (3.2 - cam.dist) / 1.6))
-        ovl_alpha = (1.0 - 0.7 * kz) * min(1.0, max(0.0, (cam.dist - 0.25) / 0.75)) if mode == "main" else 1.0
+        ovl_alpha = min(1.0, max(0.10, (cam.dist - 0.02) / 0.30)) if mode == "main" else 1.0
         loc = self.local_params(t, ph, cam) if mode == "main" else None
         img = self.scene.render(cam, tm=t, dim=0.95 if mode in ("heat", "bars") else 1.0, ovl_alpha=ovl_alpha, local=loc)
         vcam = self.scene.view_cam(cam)
