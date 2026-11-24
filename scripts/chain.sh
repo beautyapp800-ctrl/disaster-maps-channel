@@ -39,7 +39,7 @@ step() {  # (a slug listed in state/chain_done.txt is skipped)
   local total=$#
   local r4 r14
   if [ -f state/chain_done.txt ] && grep -qx "$slug${topic:+:$topic}" state/chain_done.txt; then echo "$slug done (state/chain_done.txt)"; return 0; fi
-  r4=$(res_of "$eng" 2160 "$tag"); r14=$(res_of "$eng" 1440 "$tag")
+  r4=$(res_of "$eng" 1080 "$tag"); r14=$r4
   if [ "$r4" = "success" ] || [ "$r14" = "success" ]; then echo "$slug done"; return 0; fi
   if [ "$r4" = "failure" ] || [ "$r4" = "cancelled" ]; then
     if [ "$r14" = "none" ]; then launch "$eng" 1440 "$slug" "$tag" "$topic" "$texw"; fi
@@ -54,7 +54,7 @@ step() {  # (a slug listed in state/chain_done.txt is skipped)
     if [ "$tries" -lt 8 ]; then echo "retry OSM for:$missing"; gh workflow run prep-mini.yml --ref dev -f what="osm$missing"; fi
     exit 0
   fi
-  launch "$eng" 2160 "$slug" "$tag" "$topic" "$texw"
+  launch "$eng" 1080 "$slug" "$tag" "$topic" "$texw"
 }
 # v4 (owner 23.11): state names + crisp borders, short zooms every 30-40 s
 step tornado us-tornadoes-1950-2025 v5 "" 4096 - $TORN
