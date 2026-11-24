@@ -1,0 +1,44 @@
+name: store-late
+# Builds only the covers (current code) and stores the draft release from the final-video/review artifacts of an earlier pilot run
+# whose covers job failed. No segments are re-rendered.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: {description: "pilot run id with final-video and review artifacts", required: true}
+      engine: {default: "hurricane"}
+      slug: {required: true}
+      topic: {default: ""}
+      res: {default: "1080"}
+      texw: {default: "4096"}
+permissions:
+  contents: write
+  actions: read
+jobs:
+  store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy pillow pyshp moderngl shapely
+      - run: git fetch --depth 1 origin data-mini && git checkout FETCH_HEAD -- data
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libegl1 libgl1-mesa-dri >/dev/null
+      - run: bash scripts/fetch_raw.sh
+      - name: Covers
+        env:
+          RES: "1440"
+          TEXW: ${{ inputs.texw }}
+          TOPIC: ${{ inputs.topic }}
+        run: python -m ${{ fromJSON('{"tornado":"disasters.covers","hurricane":"disasters.hcovers","earthquake":"disasters.qcovers"}')[inputs.engine] }} dl/covers
+      - uses: actions/download-artifact@v4
+        with: {name: final-video, path: dl/video, run-id: "${{ inputs.run_id }}", github-token: "${{ github.token }}"}
+      - uses: actions/download-artifact@v4
+        with: {name: review, path: dl/review, run-id: "${{ inputs.run_id }}", github-token: "${{ github.token }}"}
+      - name: Draft release reserve-slug (no YouTube upload)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ inputs.slug }}
+          RES: ${{ inputs.res }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: bash scripts/store_release.sh

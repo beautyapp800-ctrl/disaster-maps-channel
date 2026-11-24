@@ -24,23 +24,31 @@ def build(out: Path):
     r = Renderer()
     D, TL, P, sc = r.D, r.TL, r.painter, r.scene
     k = H / 720.0
+    topic = os.environ.get("TOPIC") or "us"
+    WORD = "HURRICANES" if topic != "major" else "MAJOR HURRICANES"
+    SUB = {"us": "EVERY ONE THAT HIT AMERICA", "major": "EVERY CATEGORY 3+ LANDFALL", "florida": "EVERY ONE THAT HIT FLORIDA"}.get(topic, "")
+    WORD1 = "HURRICANE" if topic != "major" else "MAJOR"
     res = {}
     # A: all 289 tracks + three real hurricanes as 3D storms off the coast
     sc.set_overlay(P.all_tracks())
     hu = []
-    for key, f in (("katrina2005", 0.55), ("andrew1992", 0.5), ("ian2022", 0.55)):
+    have = {x["key"] for x in D.events}
+    for key, f in (("katrina2005", 0.55), ("andrew1992", 0.5), ("ian2022", 0.55), ("michael2018", 0.5), ("helene2024", 0.5)):
+        if key not in have or len(hu) >= 3:   # the Florida / major films lack some of these storms
+            continue
         e = [x for x in D.events if x["key"] == key][0]
         lon, lat, kt = r.storm_pos(e["idx"], f)
         p = world3(lon, lat)
         hu.append(dict(pos=(float(p[0]), float(p[1]) + 0.002, float(p[2])), R=0.2, H=0.022, alpha=1.0, eye=0.06, seed=float(e["idx"] % 7), spin=0.5))
     img = sc.render(Cam(0.45, 0.0, 0.55, 3.0, 50, -6), tm=2.0, hurricanes=hu)
     img = shade_left(img)
-    lay, mask, boxes = text_layer([(fmt(D.n), 250 * k, (40 * k, 330 * k), YEL), ("HURRICANES", 118 * k, (44 * k, 450 * k), WHITE),
-                                   ("EVERY ONE THAT HIT AMERICA", 52 * k, (46 * k, 520 * k), WHITE)])
+    lay, mask, boxes = text_layer([(fmt(D.n), 250 * k, (40 * k, 330 * k), YEL), (WORD, 118 * k, (44 * k, 450 * k), WHITE),
+                                   (SUB, 52 * k, (46 * k, 520 * k), WHITE)])
     img.paste(lay, (0, 0), lay)
     res["A_all_hurricanes"] = (img, mask, boxes)
     # B: flooded town close-up (Katrina)
-    e = [x for x in D.events if x["key"] == "katrina2005"][0]
+    bkey = next(k_ for k_ in ("katrina2005", "ian2022", "andrew1992", "michael2018") if k_ in have)
+    e = [x for x in D.events if x["key"] == bkey][0]
     t = e["t0"] + e["HIT"] + e["RUN"] * 0.55
     ph = TL.phase_at(t)
     P.update(t, "main")
@@ -57,7 +65,7 @@ def build(out: Path):
     sc.set_overlay(P.heat_texture(175.0))
     img = sc.render(Cam(0.3, 0.0, 0.45, 3.2, 80, 0), tm=0.0)
     img = shade_left(img, 0.7, 0.5)
-    lay, mask, boxes = text_layer([("EVERY", 150 * k, (40 * k, 220 * k), WHITE), ("HURRICANE", 160 * k, (40 * k, 372 * k), YEL),
+    lay, mask, boxes = text_layer([("EVERY", 150 * k, (40 * k, 220 * k), WHITE), (WORD1, 160 * k, (40 * k, 372 * k), YEL),
                                    (fmt(D.n), 130 * k, (44 * k, 520 * k), WHITE), ("1851-2025", 64 * k, (46 * k, 600 * k), YEL)])
     img.paste(lay, (0, 0), lay)
     res["C_heat_map"] = (img, mask, boxes)
