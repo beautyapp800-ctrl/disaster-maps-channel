@@ -39,10 +39,10 @@ step() {  # (a slug listed in state/chain_done.txt is skipped)
   local total=$#
   local r4 r14
   if [ -f state/chain_done.txt ] && grep -qx "$slug${topic:+:$topic}" state/chain_done.txt; then echo "$slug done (state/chain_done.txt)"; return 0; fi
-  r4=$(res_of "$eng" 1080 "$tag"); r14=$r4
+  r4=$(res_of "$eng" 2160 "$tag"); r14=$(res_of "$eng" 1080 "$tag")
   if [ "$r4" = "success" ] || [ "$r14" = "success" ]; then echo "$slug done"; return 0; fi
   if [ "$r4" = "failure" ] || [ "$r4" = "cancelled" ]; then
-    if [ "$r14" = "none" ]; then launch "$eng" 1440 "$slug" "$tag" "$topic" "$texw"; fi
+    if [ "$r14" = "none" ]; then launch "$eng" 1080 "$slug" "$tag" "$topic" "$texw"; fi
     echo "$slug failed at both resolutions: manual check needed"; return 0
   fi
   if [ "$need" != "-" ] && ! has_file "$need"; then echo "$slug: waiting for $need"; exit 0; fi
