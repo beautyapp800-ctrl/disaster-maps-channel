@@ -3,7 +3,7 @@ name: upload
 # music Content ID test, or when the channel cannot be read in full. Never two uploads at once.
 on:
   schedule:
-    - cron: "23 6 * * *"
+    - cron: "23 */4 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
